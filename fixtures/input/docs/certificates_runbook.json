@@ -1,0 +1,6 @@
+{
+  "path": "runbooks/certificates.md",
+  "title": "Certificate Rotation Runbook",
+  "updated_at": "2026-05-10T00:00:00Z",
+  "body": "# Certificate Rotation Runbook\n\n## Preconditions\n- Access to the secrets vault and the AcmePay merchant portal.\n\n## Steps\n1. Generate a new CSR with the current CA bundle.\n2. Upload the CSR to the merchant portal and download the signed certificate.\n3. Store it in the vault under payments/acmepay/mtls and restart the gateway pods.\n\n## Stop and escalate\n- Stop if the portal rejects the CSR twice; escalate to the security on-call.\n- Do not delete the old certificate until the new one passes the health check.\n\n## Success checks\n- The gateway health check reports a valid client certificate with the new expiry date."
+}

@@ -1,0 +1,75 @@
+{
+  "id": "10330",
+  "key": "PAY-330",
+  "self": "https://acmepay.atlassian.net/rest/api/3/issue/10330",
+  "fields": {
+    "summary": "Webhook backlog after deploy",
+    "issuetype": {
+      "name": "Incident"
+    },
+    "status": {
+      "name": "Done"
+    },
+    "components": [
+      {
+        "name": "webhooks"
+      }
+    ],
+    "labels": [],
+    "priority": {
+      "name": "High"
+    },
+    "assignee": {
+      "accountId": "5f1a-alice",
+      "displayName": "Alice Tran"
+    },
+    "reporter": {
+      "accountId": "5f1a-dan",
+      "displayName": "Dan Pham"
+    },
+    "created": "2026-07-15T03:10:00.000+0000",
+    "updated": "2026-07-15T04:00:00.000+0000",
+    "description": {
+      "type": "doc",
+      "version": 1,
+      "content": [
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "Outbound merchant webhooks queued above 50k after release 4.12."
+            }
+          ]
+        }
+      ]
+    },
+    "comment": {
+      "comments": [
+        {
+          "id": "103301",
+          "author": {
+            "accountId": "5f1a-alice",
+            "displayName": "Alice Tran"
+          },
+          "created": "2026-07-15T03:40:00.000+0000",
+          "body": {
+            "type": "doc",
+            "version": 1,
+            "content": [
+              {
+                "type": "paragraph",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "Manually replayed the dead-letter queue in batches of 500 after scaling consumers."
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    }
+  }
+}

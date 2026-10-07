@@ -1,0 +1,18 @@
+{
+  "number": 1842,
+  "title": "Prevent duplicate settlement retry when provider already accepted",
+  "user": {
+    "login": "alice-tran"
+  },
+  "state": "closed",
+  "merged_at": "2026-08-05T10:00:00Z",
+  "created_at": "2026-08-04T08:00:00Z",
+  "html_url": "https://github.com/acmepay/payment-platform/pull/1842",
+  "body": "Follow-up to PAY-347. The retry worker now skips settlements whose provider state is ACCEPTED or SETTLED.\nUnknown provider state still falls through to manual handling; see incident notes.",
+  "base": {
+    "ref": "main"
+  },
+  "head": {
+    "ref": "fix/PAY-347-settlement-retry"
+  }
+}

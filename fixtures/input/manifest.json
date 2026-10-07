@@ -1,0 +1,62 @@
+{
+  "schema_version": "evidence-bundle/1",
+  "project_key": "payment-platform",
+  "source_inventory": {
+    "jira": "included",
+    "slack": "included",
+    "github": "included",
+    "document": "included"
+  },
+  "identities": {
+    "alice": {
+      "display_name": "Alice Tran",
+      "jira": "5f1a-alice",
+      "slack": "U01ALICE",
+      "github": "alice-tran"
+    },
+    "bob": {
+      "display_name": "Bob Nguyen",
+      "jira": "5f1a-bob",
+      "slack": "U02BOB",
+      "github": "bob-nguyen"
+    },
+    "carol": {
+      "display_name": "Carol Le",
+      "jira": "5f1a-carol",
+      "slack": "U03CAROL",
+      "github": "carol-le"
+    },
+    "dan": {
+      "display_name": "Dan Pham",
+      "jira": "5f1a-dan",
+      "slack": "U04DAN",
+      "github": "dan-pham"
+    }
+  },
+  "files": {
+    "jira": [
+      "jira/PAY-290.json",
+      "jira/PAY-310.json",
+      "jira/PAY-315.json",
+      "jira/PAY-321.json",
+      "jira/PAY-330.json",
+      "jira/PAY-338.json",
+      "jira/PAY-347.json",
+      "jira/PAY-352.json",
+      "jira/PAY-358.json",
+      "jira/PAY-360.json"
+    ],
+    "slack": [
+      "slack/C0PAYOPS_history.json"
+    ],
+    "github": [
+      "github/pr_1842.json",
+      "github/pr_1867.json",
+      "github/review_80.json"
+    ],
+    "document": [
+      "docs/certificates_runbook.json",
+      "docs/settlement_runbook.json"
+    ]
+  }
+}

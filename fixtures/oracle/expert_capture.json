@@ -1,0 +1,23 @@
+{
+  "answer": "Before any retry, check the provider transaction state and the idempotency key on the existing attempt. If the provider says ACCEPTED or SETTLED, never create a new settlement, reconcile the existing one instead. If the provider state is unknown or contradicts ours, pause the retry worker and escalate to the AcmePay contact. Done means the ledger shows exactly one settlement for the order.",
+  "content": {
+    "applicability": "AcmePay provider settlement flow in payment-platform",
+    "prerequisites": [
+      "The existing settlement attempt and its idempotency key can be located"
+    ],
+    "steps": [
+      "Check the provider transaction state for the existing attempt",
+      "Check the idempotency key on the existing attempt",
+      "Reconcile the existing attempt instead of creating a new one"
+    ],
+    "stop_and_escalate": [
+      "Do not create a new settlement when the provider reports ACCEPTED or SETTLED",
+      "Pause the retry worker and escalate to the AcmePay contact when the provider state is unknown or contradictory"
+    ],
+    "success_checks": [
+      "The ledger shows exactly one settlement for the order"
+    ],
+    "limitations": [],
+    "unresolved": []
+  }
+}

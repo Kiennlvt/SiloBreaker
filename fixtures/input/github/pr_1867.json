@@ -1,0 +1,18 @@
+{
+  "number": 1867,
+  "title": "Bump webhook consumer default concurrency",
+  "user": {
+    "login": "bob-nguyen"
+  },
+  "state": "closed",
+  "merged_at": "2026-08-16T09:00:00Z",
+  "created_at": "2026-08-16T08:00:00Z",
+  "html_url": "https://github.com/acmepay/payment-platform/pull/1867",
+  "body": "After PAY-352 we run 12 consumers by default.",
+  "base": {
+    "ref": "main"
+  },
+  "head": {
+    "ref": "chore/PAY-352-consumers"
+  }
+}

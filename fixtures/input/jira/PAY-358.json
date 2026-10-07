@@ -1,0 +1,84 @@
+{
+  "id": "10358",
+  "key": "PAY-358",
+  "self": "https://acmepay.atlassian.net/rest/api/3/issue/10358",
+  "fields": {
+    "summary": "Duplicate settlement risk after timeout",
+    "issuetype": {
+      "name": "Incident"
+    },
+    "status": {
+      "name": "Done"
+    },
+    "components": [
+      {
+        "name": "settlement"
+      }
+    ],
+    "labels": [],
+    "priority": {
+      "name": "High"
+    },
+    "assignee": {
+      "accountId": "5f1a-alice",
+      "displayName": "Alice Tran"
+    },
+    "reporter": {
+      "accountId": "5f1a-bob",
+      "displayName": "Bob Nguyen"
+    },
+    "created": "2026-08-27T07:45:00.000+0000",
+    "updated": "2026-08-27T09:00:00.000+0000",
+    "description": {
+      "type": "doc",
+      "version": 1,
+      "content": [
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "Provider call timed out; our side marked the attempt FAILED although the provider later accepted it."
+            }
+          ]
+        }
+      ]
+    },
+    "comment": {
+      "comments": [
+        {
+          "id": "103581",
+          "author": {
+            "accountId": "5f1a-alice",
+            "displayName": "Alice Tran"
+          },
+          "created": "2026-08-27T08:20:00.000+0000",
+          "body": {
+            "type": "doc",
+            "version": 1,
+            "content": [
+              {
+                "type": "paragraph",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "Manually matched the timed-out attempt with the provider record via the idempotency key and reversed our FAILED mark."
+                  }
+                ]
+              },
+              {
+                "type": "paragraph",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "Did not resubmit."
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    }
+  }
+}

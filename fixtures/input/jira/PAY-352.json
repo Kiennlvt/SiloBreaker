@@ -1,0 +1,75 @@
+{
+  "id": "10352",
+  "key": "PAY-352",
+  "self": "https://acmepay.atlassian.net/rest/api/3/issue/10352",
+  "fields": {
+    "summary": "Webhook backlog during peak sale",
+    "issuetype": {
+      "name": "Incident"
+    },
+    "status": {
+      "name": "Done"
+    },
+    "components": [
+      {
+        "name": "webhooks"
+      }
+    ],
+    "labels": [],
+    "priority": {
+      "name": "High"
+    },
+    "assignee": {
+      "accountId": "5f1a-bob",
+      "displayName": "Bob Nguyen"
+    },
+    "reporter": {
+      "accountId": "5f1a-dan",
+      "displayName": "Dan Pham"
+    },
+    "created": "2026-08-15T18:30:00.000+0000",
+    "updated": "2026-08-15T19:20:00.000+0000",
+    "description": {
+      "type": "doc",
+      "version": 1,
+      "content": [
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "Queue depth alarm during the August sale."
+            }
+          ]
+        }
+      ]
+    },
+    "comment": {
+      "comments": [
+        {
+          "id": "103521",
+          "author": {
+            "accountId": "5f1a-bob",
+            "displayName": "Bob Nguyen"
+          },
+          "created": "2026-08-15T19:05:00.000+0000",
+          "body": {
+            "type": "doc",
+            "version": 1,
+            "content": [
+              {
+                "type": "paragraph",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "Scaled consumers to 12 and manually replayed the dead-letter queue. Backlog cleared."
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    }
+  }
+}

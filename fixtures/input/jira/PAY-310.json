@@ -1,0 +1,75 @@
+{
+  "id": "10310",
+  "key": "PAY-310",
+  "self": "https://acmepay.atlassian.net/rest/api/3/issue/10310",
+  "fields": {
+    "summary": "Provider mTLS certificate expiring in 3 days",
+    "issuetype": {
+      "name": "Incident"
+    },
+    "status": {
+      "name": "Done"
+    },
+    "components": [
+      {
+        "name": "certificates"
+      }
+    ],
+    "labels": [],
+    "priority": {
+      "name": "High"
+    },
+    "assignee": {
+      "accountId": "5f1a-alice",
+      "displayName": "Alice Tran"
+    },
+    "reporter": {
+      "accountId": "5f1a-dan",
+      "displayName": "Dan Pham"
+    },
+    "created": "2026-07-02T08:00:00.000+0000",
+    "updated": "2026-07-02T09:30:00.000+0000",
+    "description": {
+      "type": "doc",
+      "version": 1,
+      "content": [
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "Expiry alert for the AcmePay client certificate."
+            }
+          ]
+        }
+      ]
+    },
+    "comment": {
+      "comments": [
+        {
+          "id": "103101",
+          "author": {
+            "accountId": "5f1a-alice",
+            "displayName": "Alice Tran"
+          },
+          "created": "2026-07-02T09:10:00.000+0000",
+          "body": {
+            "type": "doc",
+            "version": 1,
+            "content": [
+              {
+                "type": "paragraph",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "Rotated the certificate manually following runbooks/certificates.md, all checks green."
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    }
+  }
+}
