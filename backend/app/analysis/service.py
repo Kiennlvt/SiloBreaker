@@ -28,9 +28,34 @@ FACET_QUESTIONS = {
 
 
 def get_extractor() -> Extractor:
-    provider = get_settings().ai_provider
+    settings = get_settings()
+    provider = settings.ai_provider
     if provider == "offline":
         return OfflineExtractor()
+    if provider == "openai":
+        if not settings.openai_api_key:
+            raise AppError(
+                503,
+                "provider_not_configured",
+                "SB_AI_PROVIDER=openai but SB_OPENAI_API_KEY is not set",
+            )
+        try:
+            import openai  # only needed in this mode: pip install -e ".[ai]"
+        except ImportError as exc:
+            raise AppError(
+                503,
+                "provider_not_configured",
+                "SB_AI_PROVIDER=openai needs the 'ai' extra: pip install -e \".[ai]\"",
+            ) from exc
+        from app.analysis.openai_extractor import OpenAIExtractor
+
+        return OpenAIExtractor(
+            openai.OpenAI(api_key=settings.openai_api_key, max_retries=0),
+            settings.openai_model,
+            timeout_seconds=settings.ai_timeout_seconds,
+            max_retries=settings.ai_max_retries,
+            max_calls=settings.ai_max_calls_per_stage,
+        )
     raise AppError(
         503, "provider_not_configured", f"AI provider '{provider}' is not configured in this build"
     )
@@ -144,6 +169,8 @@ def run_analysis(
     else:
         try:
             proposal = extractor.extract(view)
+        except AppError:
+            raise  # already a classified provider error (502/503/504)
         except Exception as exc:  # provider failure is a system error, never a finding
             raise AppError(502, "provider_error", f"Extraction failed: {exc}") from exc
         reused_from = None

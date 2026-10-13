@@ -5,6 +5,11 @@ looks for issue keys, thread/PR parents and a small lexicon, and never follows a
 instruction written inside the evidence. It lets the full flow run without an API key
 and gives tests a reproducible baseline. A model-backed extractor must return the same
 Extraction schema and passes through the same citation validation.
+
+Known limitation: areas are discovered only from Jira `components`. An operational topic
+that appears only in Slack, GitHub or a runbook, or a Jira issue without components, is
+not found by this extractor. Discovering such areas is the model-backed extractor's job
+(app/analysis/openai_extractor.py).
 """
 
 import re
