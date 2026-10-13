@@ -17,10 +17,10 @@ class Settings(BaseSettings):
     ai_model: str = "offline-rules/1"
     openai_api_key: str | None = None
     ai_timeout_seconds: float = 60.0
-    # Versions frozen into every analysis snapshot (FR-03).
+    # Versions frozen into every analysis snapshot (FR-03). The scoring version lives with
+    # the rules it describes: app.scoring.rules.SCORING_VERSION.
     prompt_version: str = "detect/1"
     schema_version: str = "analysis/1"
-    scoring_version: str = "risk/1"
     cors_origins: list[str] = ["http://localhost:5173"]
 
 

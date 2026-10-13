@@ -66,6 +66,18 @@ def review_finding(
         raise AppError(409, "invalid_transition", f"finding is already {finding.status}")
     if action in ("reject", "obsolete", "correct") and not reason.strip():
         raise AppError(422, "reason_required", f"a reason is required to {action}")
+    published = session.scalar(
+        select(func.count()).where(KnowledgeVersion.finding_id == finding.id)
+    )
+    if action == "reject" and published:
+        raise AppError(
+            409,
+            "invalid_transition",
+            "this finding already has approved knowledge; mark it obsolete instead of rejecting",
+        )
+    metadata: dict = {"reason": reason}
+    if action == "obsolete" and published:
+        metadata["retired_versions"] = published  # every version now exports as retired
     finding.status = REVIEW_TRANSITIONS[action]
     finding.status_reason = reason.strip() or None
     if action == "correct" and corrected_summary:
@@ -79,7 +91,7 @@ def review_finding(
         "finding",
         finding.id,
         finding.revision,
-        {"reason": reason},
+        metadata,
     )
     session.flush()
     return finding
@@ -196,3 +208,29 @@ def publish(
         {"draft_revision": draft.revision},
     )
     return version
+
+
+def prior_knowledge(session: Session, finding: Finding) -> dict | None:
+    """Latest approved version for the same area from an earlier finding of this handoff.
+
+    A re-analysis creates new findings; this lets them point at knowledge that was already
+    approved instead of asking the expert to start over. Obsolete or rejected findings
+    never count. Computed by query, nothing is copied.
+    """
+    analysis = session.get(Analysis, finding.analysis_id)
+    row = session.execute(
+        select(KnowledgeVersion.id, KnowledgeVersion.version_no, Finding.id)
+        .join(Finding, Finding.id == KnowledgeVersion.finding_id)
+        .join(Analysis, Analysis.id == Finding.analysis_id)
+        .where(
+            Analysis.handoff_id == analysis.handoff_id,
+            Finding.area_key == finding.area_key,
+            Finding.id != finding.id,
+            Finding.status == "confirmed",
+        )
+        .order_by(KnowledgeVersion.approved_at.desc(), KnowledgeVersion.version_no.desc())
+        .limit(1)
+    ).first()
+    if row is None:
+        return None
+    return {"finding_id": str(row[2]), "version_id": str(row[0]), "version_no": row[1]}

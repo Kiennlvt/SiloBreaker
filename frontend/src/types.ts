@@ -24,6 +24,8 @@ export type Handoff = {
 export type Signal = number | null;
 export type EvidenceRef = { chunk_id: string; quote: string; event?: string; document?: string };
 
+export type PriorKnowledge = { finding_id: string; version_id: string; version_no: number };
+
 export type Finding = {
   id: string;
   area_key: string;
@@ -48,6 +50,8 @@ export type Finding = {
   status_reason: string | null;
   revision: number;
   evidence_refs: EvidenceRef[];
+  // Approved knowledge for the same area from an earlier analysis of this handoff.
+  prior_knowledge: PriorKnowledge | null;
 };
 
 export type Analysis = {

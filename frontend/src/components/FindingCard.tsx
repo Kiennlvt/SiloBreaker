@@ -63,6 +63,9 @@ export default function FindingCard({
             <span className={`elig elig-${f.eligibility_status}`}>{STATUS_LABEL[f.eligibility_status]}</span>
             <span className={`conf conf-${f.evidence_confidence}`}>{f.evidence_confidence} confidence</span>
             {f.status !== "candidate" && <span className={`review review-${f.status}`}>{f.status}</span>}
+            {f.prior_knowledge && (
+              <span className="review review-confirmed">Đã có v{f.prior_knowledge.version_no} được duyệt</span>
+            )}
           </div>
         </div>
         <div className="priority" aria-label="Review priority">

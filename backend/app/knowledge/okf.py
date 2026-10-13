@@ -21,8 +21,31 @@ def _list(items: list[str], ordered: bool) -> str:
     return "\n".join(f"{n}. {s}" if ordered else f"- {s}" for n, s in enumerate(items, 1))
 
 
+def lifecycle(
+    version: KnowledgeVersion, finding: Finding, successor: KnowledgeVersion | None
+) -> dict:
+    """Derived from data at render time; knowledge_version rows are never updated.
+
+    retired: the finding was marked obsolete after publication (every version retires).
+    superseded: a newer version of the same finding exists.
+    active: this is the newest version of a live finding.
+    """
+    supersedes = str(version.supersedes_version_id) if version.supersedes_version_id else None
+    if finding.status == "obsolete":
+        out = {"status": "retired", "reason": finding.status_reason}
+    elif successor is not None:
+        out = {"status": "superseded", "superseded_by": str(successor.id)}
+    else:
+        out = {"status": "active"}
+    return out | {"supersedes": supersedes}
+
+
 def render_okf(
-    version: KnowledgeVersion, finding: Finding, project_key: str, source_titles: dict[str, str]
+    version: KnowledgeVersion,
+    finding: Finding,
+    project_key: str,
+    source_titles: dict[str, str],
+    successor: KnowledgeVersion | None = None,
 ) -> str:
     c = version.approved_content
     sources, seen = [], set()
@@ -47,12 +70,7 @@ def render_okf(
         "approved_by": version.approved_by,
         "approved_at": version.approved_at.isoformat(),
         "sources": sources,
-        "lifecycle": {
-            "status": "active",
-            "supersedes": str(version.supersedes_version_id)
-            if version.supersedes_version_id
-            else None,
-        },
+        "lifecycle": lifecycle(version, finding, successor),
     }
     body = [f"# Applicability\n\n{c['applicability']}"]
     for title, key, ordered in SECTIONS:

@@ -39,7 +39,7 @@ def handoff_out(h: Handoff) -> dict:
     }
 
 
-def finding_out(f: Finding) -> dict:
+def finding_out(f: Finding, prior: dict | None = None) -> dict:
     sv = f.signal_values
     return {
         "id": str(f.id),
@@ -61,10 +61,14 @@ def finding_out(f: Finding) -> dict:
         "status_reason": f.status_reason,
         "revision": f.revision,
         "evidence_refs": f.evidence_refs,
+        "prior_knowledge": prior,
     }
 
 
-def analysis_out(a: Analysis, findings: list[Finding]) -> dict:
+def analysis_out(
+    a: Analysis, findings: list[Finding], priors: dict[str, dict | None] | None = None
+) -> dict:
+    priors = priors or {}
     order = {
         "ranked": 0,
         "review_required": 1,
@@ -89,7 +93,7 @@ def analysis_out(a: Analysis, findings: list[Finding]) -> dict:
         "rejected_areas": a.extraction.get("rejected", []),
         "reused_extraction_from": a.extraction.get("reused_from_analysis"),
         "created_at": a.created_at,
-        "findings": [finding_out(f) for f in findings],
+        "findings": [finding_out(f, priors.get(str(f.id))) for f in findings],
     }
 
 

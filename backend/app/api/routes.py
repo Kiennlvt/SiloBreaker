@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.analysis.service import run_analysis
 from app.api import serializers as S
+from app.audit import audit
 from app.config import get_settings
 from app.db import get_session
 from app.errors import AppError
@@ -123,6 +124,15 @@ def create_handoff(body: HandoffIn, session: Session = Depends(tx)) -> dict:
     )
     session.add(h)
     session.flush()
+    audit(
+        session,
+        h.id,
+        h.expert_id,
+        "handoff.created",
+        "handoff",
+        h.id,
+        metadata={"bundle_id": str(bundle.id), "successor_id": h.successor_id},
+    )
     return S.handoff_out(h)
 
 
@@ -177,7 +187,8 @@ def get_analysis(analysis_id: str, session: Session = Depends(tx)) -> dict:
 def _analysis(session: Session, analysis_id: uuid.UUID) -> dict:
     a = session.get(Analysis, analysis_id)
     findings = session.scalars(select(Finding).where(Finding.analysis_id == analysis_id)).all()
-    return S.analysis_out(a, list(findings))
+    priors = {str(f.id): K.prior_knowledge(session, f) for f in findings}
+    return S.analysis_out(a, list(findings), priors)
 
 
 # ---------- capture ----------
@@ -193,7 +204,7 @@ def get_finding(finding_id: str, session: Session = Depends(tx)) -> dict:
     ).all()
     analysis = session.get(Analysis, f.analysis_id)
     handoff = session.get(Handoff, analysis.handoff_id)
-    return S.finding_out(f) | {
+    return S.finding_out(f, K.prior_knowledge(session, f)) | {
         "handoff": S.handoff_out(handoff),
         "draft": S.draft_out(K.get_draft(session, f.id)),
         "versions": [S.version_out(v) for v in versions],
@@ -220,7 +231,7 @@ def review(finding_id: str, body: ReviewIn, session: Session = Depends(tx)) -> d
         body.actor_id,
         body.corrected_summary,
     )
-    return S.finding_out(f)
+    return S.finding_out(f, K.prior_knowledge(session, f))
 
 
 class StructureIn(BaseModel):
@@ -300,7 +311,10 @@ def get_okf(version_id: str, session: Session = Depends(tx)) -> PlainTextRespons
             )
         ).all()
     )
-    md = render_okf(v, f, handoff.project_key, {k: t for k, t in titles.items() if t})
+    successor = session.scalar(
+        select(KnowledgeVersion).where(KnowledgeVersion.supersedes_version_id == v.id).limit(1)
+    )
+    md = render_okf(v, f, handoff.project_key, {k: t for k, t in titles.items() if t}, successor)
     return PlainTextResponse(
         md,
         media_type="text/markdown; charset=utf-8",

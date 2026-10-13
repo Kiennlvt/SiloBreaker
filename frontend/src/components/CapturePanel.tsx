@@ -96,6 +96,13 @@ export default function CapturePanel({ findingId, onChanged }: { findingId: stri
         </p>
       )}
 
+      {detail.status === "candidate" && detail.prior_knowledge && (
+        <p className="notice" role="status">
+          Đã có v{detail.prior_knowledge.version_no} được duyệt cho khu vực này từ một phân tích trước của cùng handoff.
+          Kiến thức đó vẫn dùng được cho bước Verify; chỉ cần review lại nếu bạn muốn soạn một phiên bản mới.
+        </p>
+      )}
+
       {detail.status === "candidate" && (
         <div className="stack">
           <p>
@@ -219,6 +226,23 @@ export default function CapturePanel({ findingId, onChanged }: { findingId: stri
             </div>
           </div>
         </div>
+      )}
+
+      {detail.status === "confirmed" && detail.versions.length > 0 && (
+        <details className="controls">
+          <summary>Retire this knowledge</summary>
+          <p className="muted small">
+            Published knowledge cannot be rejected. Marking it obsolete keeps every version readable but exports them as
+            retired.
+          </p>
+          <label className="field">
+            <span>Reason for marking obsolete</span>
+            <input value={reason} onChange={(e) => setReason(e.target.value)} />
+          </label>
+          <button className="ghost" disabled={busy || !reason.trim()} onClick={() => review("obsolete")}>
+            Mark obsolete
+          </button>
+        </details>
       )}
 
       {detail.versions.length > 0 && (
