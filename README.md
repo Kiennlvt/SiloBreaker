@@ -30,7 +30,7 @@ docker compose up -d db
 # 2. Backend API on http://localhost:8000  (docs at /docs)
 cd backend
 python -m venv .venv && source .venv/bin/activate     # Windows: .venv\Scripts\activate
-pip install -e ".[dev]"
+pip install -e ".[dev]"            # add ,e2e for Playwright and ,ai for the OpenAI extractor
 alembic upgrade head
 uvicorn app.main:app --reload --port 8000
 
@@ -40,6 +40,17 @@ npm install
 npm run dev
 ```
 
+Optional dependency groups in `backend/pyproject.toml`:
+
+| Group | Contents | When |
+|---|---|---|
+| `dev` | pytest, httpx, ruff | always for development |
+| `e2e` | playwright | `pip install -e ".[dev,e2e]" && playwright install chromium` |
+| `ai` | openai | only when `SB_AI_PROVIDER=openai`; offline mode never imports it |
+
+Without Docker, use a local PostgreSQL (user/password `postgres/postgres`), create the
+`silobreaker` database and run `scripts/create-test-db.sql`.
+
 Mở http://localhost:5173, chọn Alice → Bob, bấm **Start handoff and analyse**. Settlement recovery
 sẽ đứng đầu với điểm 88; bấm **Inspect citations** để xem bằng chứng gốc, rồi **Review with expert**
 để xác nhận, nhập câu trả lời của chuyên gia, lưu bản nháp, phê duyệt và xem file OKF.
@@ -48,9 +59,11 @@ sẽ đứng đầu với điểm 88; bấm **Inspect citations** để xem bằ
 
 ```bash
 cd backend && pytest -q          # 28 tests against PostgreSQL (silobreaker_test)
-cd frontend && npm run build     # type-check
-pip install playwright && playwright install chromium
+cd frontend && npm run build     # type-check + build
+cd frontend && npm test          # Vitest component tests (jsdom)
+pip install -e "backend[e2e]" && playwright install chromium
 python e2e/demo_flow.py          # browser flow; API and dev server must be running
+# If the Chromium download is blocked: SB_E2E_BROWSER_CHANNEL=chrome (or msedge) uses an installed browser
 ```
 
 The suite covers label isolation, the designed outcome of every fixture control, duplicate-event
