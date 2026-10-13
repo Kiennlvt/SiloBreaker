@@ -14,10 +14,11 @@ Human approval is the boundary between system interpretation and approved knowle
 
 | Stage | State |
 |---|---|
-| Detect: adapters, citation validation, event linking, deterministic scoring, gates | Done |
-| Capture: review, revisioned drafts, explicit approval, immutable versions, OKF export | Done |
-| Verify: exercise generation, rubric review, successor assessment | Next milestone (tables already exist) |
-| Model-backed extractor | Next milestone; an offline deterministic extractor runs today |
+| Detect: adapters, coverage states (FR-04), strict citation validation, event linking, deterministic scoring, gates | Done |
+| Capture: review, revisioned drafts, explicit approval, immutable versions, OKF export with derived lifecycle (active/superseded/retired) | Done |
+| Verify: exercise generation, expert rubric review/release, successor attempts, criterion-level assessment, deterministic aggregate, retry/reassess | Done |
+| Model-backed extractor/generator/assessor (`SB_AI_PROVIDER=openai`) | Implemented and tested with a fake client; not exercised against a live model |
+| Authentication | Not implemented (see below) |
 
 ## Quick start / Chạy nhanh
 
@@ -53,20 +54,24 @@ Without Docker, use a local PostgreSQL (user/password `postgres/postgres`), crea
 
 Mở http://localhost:5173, chọn Alice → Bob, bấm **Start handoff and analyse**. Settlement recovery
 sẽ đứng đầu với điểm 88; bấm **Inspect citations** để xem bằng chứng gốc, rồi **Review with expert**
-để xác nhận, nhập câu trả lời của chuyên gia, lưu bản nháp, phê duyệt và xem file OKF.
+để xác nhận, nhập câu trả lời của chuyên gia, lưu bản nháp, phê duyệt và xem file OKF. Ở bước
+**Verify**, bấm **Generate exercise**, xem rubric riêng tư rồi **Approve and release exercise**; chuyển
+sang **Successor (bob)** để trả lời (successor không thấy rubric), xem kết quả theo từng tiêu chí và
+bấm **Thử lại** để nộp attempt mới.
 
 ## Tests
 
 ```bash
-cd backend && pytest -q          # 28 tests against PostgreSQL (silobreaker_test)
+cd backend && pytest -q          # 93 tests against PostgreSQL (silobreaker_test)
 cd frontend && npm run build     # type-check + build
-cd frontend && npm test          # Vitest component tests (jsdom)
+cd frontend && npm test          # 11 Vitest tests (jsdom)
 pip install -e "backend[e2e]" && playwright install chromium
-python e2e/demo_flow.py          # browser flow; API and dev server must be running
+python e2e/demo_flow.py --runs 3 # full 4-minute flow; API and dev server must be running
 # If the Chromium download is blocked: SB_E2E_BROWSER_CHANNEL=chrome (or msedge) uses an installed browser
 ```
 
-The suite covers label isolation, the designed outcome of every fixture control, duplicate-event
+The suite covers rubric privacy, critical omissions, paraphrase matching, provider failures
+(502/504, never a learner result), attempt immutability, coverage states, label isolation, the designed outcome of every fixture control, duplicate-event
 counting, actor change, prompt injection in evidence, citation resolution and rejection,
 idempotency, stale revisions, immutability enforced by database triggers, and OKF export. It also
 reproduces the exhaustive scoring analysis (243 configurations) reported in the project report.

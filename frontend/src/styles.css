@@ -178,3 +178,4 @@ textarea { resize: vertical; }
 .verdict-unmet .verdict-label { color: var(--danger); }
 .verdict-partial .verdict-label, .verdict-uncertain .verdict-label { color: var(--system); }
 .answer { white-space: pre-wrap; }
+.check input, .role-switch input { width: auto; margin: 0; padding: 0; }
