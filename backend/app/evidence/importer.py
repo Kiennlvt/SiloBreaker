@@ -12,14 +12,37 @@ from app.evidence.contract import EvidenceItemInput, Identities, sha256_json, sh
 from app.models import EvidenceBundle, EvidenceChunk, EvidenceItem
 
 CHUNK_LINES = 6
+# FR-04. included: imported in full. incomplete: imported, but the provider export is known to
+# be partial. excluded: deliberately left out. unavailable: not supplied at all.
+SOURCE_STATES = ("included", "excluded", "unavailable", "incomplete")
+IMPORTED_STATES = ("included", "incomplete")
 
 
-def load_bundle(root: Path) -> tuple[dict, list[EvidenceItemInput]]:
+def source_inventory(manifest: dict) -> dict[str, str]:
+    """Declared state per known family; a family with files but no state is included."""
+    declared = dict(manifest.get("source_inventory", {}))
+    bad = {k: v for k, v in declared.items() if v not in SOURCE_STATES}
+    if bad:
+        raise AppError(
+            422,
+            "invalid_source_state",
+            f"source states must be one of {', '.join(SOURCE_STATES)}; got {bad}",
+        )
+    files = manifest.get("files", {})
+    inventory = {}
+    for family in ADAPTERS:
+        default = "included" if files.get(family) else "unavailable"
+        inventory[family] = declared.get(family, default)
+    return inventory
+
+
+def load_bundle(root: Path) -> tuple[dict, dict[str, str], list[EvidenceItemInput]]:
     manifest_path = root / "manifest.json"
     if not manifest_path.exists():
         raise AppError(422, "manifest_missing", f"No manifest.json in {root.name}")
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     identities = Identities(manifest.get("identities", {}))
+    inventory = source_inventory(manifest)
     items: list[EvidenceItemInput] = []
     errors: list[str] = []
     for source, files in manifest.get("files", {}).items():
@@ -27,6 +50,8 @@ def load_bundle(root: Path) -> tuple[dict, list[EvidenceItemInput]]:
         if adapter_cls is None:
             errors.append(f"unknown source family '{source}'")
             continue
+        if inventory[source] not in IMPORTED_STATES:
+            continue  # excluded/unavailable families are never read
         adapter = adapter_cls(root, identities)
         for path, record in zip(files, adapter.load(files), strict=False):
             try:
@@ -35,7 +60,7 @@ def load_bundle(root: Path) -> tuple[dict, list[EvidenceItemInput]]:
                 errors.append(f"{path}: cannot normalize ({exc.__class__.__name__}: {exc})")
     if errors:
         raise AppError(422, "invalid_evidence", "; ".join(errors))
-    return manifest, _dedupe(items)
+    return manifest, inventory, _dedupe(items)
 
 
 def _dedupe(items: list[EvidenceItemInput]) -> list[EvidenceItemInput]:
@@ -77,11 +102,13 @@ def chunk_text(text: str) -> list[tuple[int, int, str]]:
 
 
 def import_bundle(session: Session, root: Path) -> EvidenceBundle:
-    manifest, items = load_bundle(root)
+    manifest, inventory, items = load_bundle(root)
     content_hash = sha256_json(
         {
             "schema_version": manifest["schema_version"],
             "project_key": manifest["project_key"],
+            # Same records with different declared coverage are a different bundle.
+            "source_inventory": inventory,
             "items": [i.payload_hash() for i in items],
         }
     )
@@ -92,9 +119,6 @@ def import_bundle(session: Session, root: Path) -> EvidenceBundle:
         return existing  # importing the same bundle twice is idempotent
 
     times = [i.timestamp for i in items if i.timestamp]
-    inventory = dict(manifest.get("source_inventory", {}))
-    for family in ADAPTERS:
-        inventory.setdefault(family, "unavailable")
     bundle = EvidenceBundle(
         project_key=manifest["project_key"],
         schema_version=manifest["schema_version"],
@@ -102,7 +126,7 @@ def import_bundle(session: Session, root: Path) -> EvidenceBundle:
         source_inventory=inventory,
         coverage_start=min(times) if times else None,
         coverage_end=max(times) if times else None,
-        import_complete=True,
+        import_complete="incomplete" not in inventory.values(),
     )
     session.add(bundle)
     session.flush()

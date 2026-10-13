@@ -9,6 +9,7 @@ export type Bundle = {
   source_inventory: Record<string, string>;
   coverage_start: string | null;
   coverage_end: string | null;
+  import_complete: boolean;
   item_count: number;
   people: Person[];
 };

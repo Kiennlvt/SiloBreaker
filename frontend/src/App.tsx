@@ -7,6 +7,14 @@ import FindingCard from "./components/FindingCard";
 import VerifyPanel from "./components/VerifyPanel";
 import type { Analysis, Bundle, EvidenceRef, Handoff } from "./types";
 
+// FR-04: the four coverage states mean different things for the signals computed from them.
+const SOURCE_STATE_HELP: Record<string, string> = {
+  included: "imported in full",
+  incomplete: "imported, but the export is known to be partial; signals that depend on it are unknown",
+  excluded: "deliberately left out of this bundle",
+  unavailable: "not supplied; signals that depend on it are unknown",
+};
+
 export default function App() {
   const [bundle, setBundle] = useState<Bundle | null>(null);
   const [handoff, setHandoff] = useState<Handoff | null>(null);
@@ -109,9 +117,12 @@ export default function App() {
           {bundle && (
             <dl className="inventory">
               {Object.entries(bundle.source_inventory).map(([k, v]) => (
-                <div key={k} className={`inv inv-${v}`}>
+                <div key={k} className={`inv inv-${v}`} title={SOURCE_STATE_HELP[v] ?? v}>
                   <dt>{k}</dt>
-                  <dd>{v}</dd>
+                  <dd>
+                    {v}
+                    <span className="visually-hidden"> — {SOURCE_STATE_HELP[v] ?? v}</span>
+                  </dd>
                 </div>
               ))}
               <div className="inv">
@@ -121,6 +132,11 @@ export default function App() {
             </dl>
           )}
         </header>
+        {bundle && !bundle.import_complete && (
+          <p className="notice" role="status">
+            Some sources are incomplete. Missing documentation is treated as unknown, never as a gap.
+          </p>
+        )}
         {bundle && !handoff && (
           <div className="row gap wrap end">
             <label className="field">

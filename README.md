@@ -71,6 +71,14 @@ counting, actor change, prompt injection in evidence, citation resolution and re
 idempotency, stale revisions, immutability enforced by database triggers, and OKF export. It also
 reproduces the exhaustive scoring analysis (243 configurations) reported in the project report.
 
+## Security status: no authentication yet
+
+There is **no authentication or authorization layer**. Every mutation names its actor in the
+request body (`actor_id`, `author_id`, `approver_id`) and reads pass `viewer_id`; the backend
+checks that this person has the right role in the handoff (expert, successor), but it trusts
+the identifier as given. That is only acceptable for this synthetic-data demo. A real
+deployment must derive the actor from an authenticated session instead of the request body.
+
 ## Repository layout
 
 ```text

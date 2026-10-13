@@ -125,7 +125,16 @@ def to_observation(area: ProposedArea, view: BundleView) -> AreaObs:
     )
 
 
-def explain(area: ProposedArea, res: ScoreResult, selected: str) -> tuple[str, str | None]:
+DOC_STATE_TEXT = {
+    "incomplete": "Documentation import is incomplete",
+    "excluded": "Documentation was excluded from this bundle",
+    "unavailable": "Documentation was not supplied",
+}
+
+
+def explain(
+    area: ProposedArea, res: ScoreResult, selected: str, docs_state: str = "included"
+) -> tuple[str, str | None]:
     c = res.counts
     keys = ", ".join(e.key for e in area.events) or "none"
     parts = [f"{c['distinct_events']} distinct event(s) in the supplied evidence ({keys})."]
@@ -137,7 +146,8 @@ def explain(area: ProposedArea, res: ScoreResult, selected: str) -> tuple[str, s
         )
     parts.append(f"{c['manual_events']} event(s) involved manual intervention.")
     if res.signals["D"] is None:
-        parts.append("Documentation was not imported, so coverage is unknown.")
+        lead = DOC_STATE_TEXT.get(docs_state, "Documentation was not imported")
+        parts.append(f"{lead}, so coverage is unknown.")
     elif c["relevant_documents"] == 0:
         parts.append("No relevant procedure was found in the supplied documentation.")
     elif res.missing_facets:
@@ -211,7 +221,8 @@ def run_analysis(
     top = set(rank(results))
     for area in kept:
         res = results[area.key]
-        summary, question = explain(area, res, selected_engineer)
+        docs_state = view.source_inventory.get("document", "unavailable")
+        summary, question = explain(area, res, selected_engineer, docs_state)
         # Every area is stored for transparency; `top_candidate` marks the (at most 3)
         # ranked areas surfaced as candidates.
         status = res.eligibility_status

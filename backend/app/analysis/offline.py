@@ -26,16 +26,23 @@ from app.analysis.contract import (
 )
 
 MANUAL = re.compile(r"\bmanual(?:ly)?\b|\bby hand\b", re.IGNORECASE)
+# A facet counts only when a Markdown heading (## or ###) names it, not on a passing mention.
 FACET_HEADINGS = {
-    "preconditions": re.compile(
-        r"^##\s*(preconditions|prerequisites)", re.IGNORECASE | re.MULTILINE
-    ),
-    "steps": re.compile(r"^##\s*(steps|procedure)", re.IGNORECASE | re.MULTILINE),
-    "stop_and_escalate": re.compile(r"^##\s*(stop|escalat)", re.IGNORECASE | re.MULTILINE),
-    "success_checks": re.compile(
-        r"^##\s*(success|verification|verify)", re.IGNORECASE | re.MULTILINE
-    ),
+    "preconditions": r"preconditions?|prerequisites?|requirements|before you (begin|start)",
+    "steps": r"steps|procedure|instructions|how to|rollback|roll back|recovery steps",
+    "stop_and_escalate": r"stop|when to stop|escalat|abort|do not continue",
+    "success_checks": r"success|verification|verify|validation|validate|checks?\b|done when",
 }
+FACET_RX = {
+    facet: re.compile(rf"^#{{2,3}}\s*(?:{words})", re.IGNORECASE | re.MULTILINE)
+    for facet, words in FACET_HEADINGS.items()
+}
+
+
+def doc_facets(body: str) -> list[str]:
+    return [f for f, rx in FACET_RX.items() if rx.search(body)]
+
+
 INCIDENT_TYPES = {"incident"}
 
 
@@ -111,7 +118,7 @@ class OfflineExtractor:
                 if comp.lower() not in where:
                     continue
                 body = _text(doc)
-                facets = [f for f, rx in FACET_HEADINGS.items() if rx.search(body)]
+                facets = doc_facets(body)
                 documents.append(
                     ProposedDocument(record_ref=doc.ref, facets=facets, citations=[_cite(doc)])
                 )

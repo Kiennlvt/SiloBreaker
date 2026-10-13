@@ -92,7 +92,10 @@ textarea { resize: vertical; }
 .inv { background: var(--bg); border-radius: 6px; padding: 4px 10px; font-size: 0.8rem; }
 .inv dt { color: var(--muted); }
 .inv dd { margin: 0; font-weight: 600; }
-.inv-unavailable dd, .inv-incomplete dd { color: var(--danger); }
+.inv-unavailable dd { color: var(--danger); }
+.inv-incomplete { background: var(--system-bg); }
+.inv-incomplete dd { color: var(--system); }
+.inv-excluded dd { color: var(--muted); font-style: italic; }
 
 .truth { display: inline-block; font-size: 0.7rem; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; border-radius: 4px; padding: 1px 7px; margin: 8px 0 2px; }
 .truth-source { color: var(--source); background: var(--source-bg); }
