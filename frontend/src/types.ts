@@ -110,3 +110,51 @@ export type FindingDetail = Finding & {
   draft: Draft | null;
   versions: KnowledgeVersion[];
 };
+
+// ---------- Verify ----------
+// The successor's view never contains criteria; `results` appears only after assessment.
+
+export type Criterion = { id: string; text: string; critical: boolean; source_path: string };
+
+export type Verdict = "met" | "partial" | "unmet" | "uncertain";
+export type AggregateResult = "demonstrated" | "partial" | "not_yet" | "review_required";
+
+export type CriterionResult = {
+  criterion_id: string;
+  text: string;
+  verdict: Verdict;
+  evidence_quote: string;
+  critical?: boolean; // expert view only
+  source_path?: string; // expert view only
+};
+
+export type Attempt = {
+  id: string;
+  exercise_id: string;
+  knowledge_version_id: string;
+  knowledge_version_no: number;
+  successor_id: string;
+  answer: string;
+  assessment_status: "pending" | "succeeded" | "failed";
+  assessment_error: string | null;
+  aggregate_result: AggregateResult | null;
+  results: CriterionResult[] | null;
+  created_at: string;
+  assessed_at: string | null;
+};
+
+export type Exercise = {
+  id: string;
+  knowledge_version_id: string;
+  knowledge_version_no: number;
+  status: "draft" | "ready" | "obsolete";
+  scenario: string;
+  approved_at: string | null;
+  viewer_role: "expert" | "successor";
+  attempts: Attempt[];
+  // expert view only
+  revision?: number;
+  approved_by?: string | null;
+  generator_id?: string | null;
+  criteria?: Criterion[];
+};

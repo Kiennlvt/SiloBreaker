@@ -1,12 +1,15 @@
 from app.models import (
     Analysis,
+    Attempt,
     EvidenceBundle,
     EvidenceChunk,
     EvidenceItem,
+    Exercise,
     Finding,
     Handoff,
     KnowledgeDraft,
     KnowledgeVersion,
+    Operation,
 )
 
 
@@ -150,4 +153,85 @@ def version_out(v: KnowledgeVersion) -> dict:
         "content_hash": v.content_hash,
         "supersedes_version_id": str(v.supersedes_version_id) if v.supersedes_version_id else None,
         "source_refs": v.source_refs,
+    }
+
+
+# ---------- verify ----------
+# The successor view is built from an allow-list of fields. It never includes the rubric;
+# criterion-level feedback appears only on an attempt whose assessment has completed.
+
+
+def _results(attempt: Attempt, rubric: list[dict], expert: bool) -> list[dict] | None:
+    if attempt.assessment_status != "succeeded" or attempt.criterion_results is None:
+        return None
+    by_id = {c["id"]: c for c in rubric}
+    out = []
+    for m in attempt.criterion_results:
+        c = by_id.get(m["criterion_id"], {})
+        row = {
+            "criterion_id": m["criterion_id"],
+            "text": c.get("text", ""),
+            "verdict": m["verdict"],
+            "evidence_quote": m["evidence_quote"],
+        }
+        if expert:
+            row |= {"critical": c.get("critical", False), "source_path": c.get("source_path")}
+        out.append(row)
+    return out
+
+
+def attempt_out(a: Attempt, exercise: Exercise, version: KnowledgeVersion, viewer: str) -> dict:
+    out = {
+        "id": str(a.id),
+        "exercise_id": str(a.exercise_id),
+        "knowledge_version_id": str(version.id),
+        "knowledge_version_no": version.version_no,
+        "successor_id": a.successor_id,
+        "answer": a.answer,
+        "assessment_status": a.assessment_status,
+        "assessment_error": a.assessment_error,
+        "aggregate_result": a.aggregate_result,
+        "results": _results(a, exercise.rubric, viewer == "expert"),
+        "created_at": a.created_at,
+        "assessed_at": a.assessed_at,
+    }
+    if viewer == "expert":
+        out["assessor_id"] = a.assessor_id
+    return out
+
+
+def exercise_out(
+    e: Exercise, version: KnowledgeVersion, viewer: str, attempts: list[Attempt]
+) -> dict:
+    out = {
+        "id": str(e.id),
+        "knowledge_version_id": str(version.id),
+        "knowledge_version_no": version.version_no,
+        "status": e.status,
+        "scenario": e.scenario,
+        "approved_at": e.approved_at,
+        "viewer_role": viewer,
+        "attempts": [attempt_out(a, e, version, viewer) for a in attempts],
+    }
+    if viewer == "expert":
+        out |= {
+            "revision": e.revision,
+            "approved_by": e.approved_by,
+            "generator_id": e.generator_id,
+            "criteria": e.rubric,
+        }
+    return out
+
+
+def operation_out(o: Operation) -> dict:
+    return {
+        "id": str(o.id),
+        "kind": o.kind,
+        "state": o.state,
+        "result_type": o.result_type,
+        "result_id": str(o.result_id) if o.result_id else None,
+        "error_code": o.error_code,
+        "error_detail": o.error_detail,
+        "started_at": o.started_at,
+        "finished_at": o.finished_at,
     }

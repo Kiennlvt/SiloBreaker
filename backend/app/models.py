@@ -213,6 +213,7 @@ class Exercise(Base):
     revision: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     approved_by: Mapped[str | None] = mapped_column(Text)
     approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    generator_id: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = _now()
 
 
@@ -225,6 +226,10 @@ class Attempt(Base):
             "aggregate_result is null or aggregate_result in "
             "('demonstrated','partial','not_yet','review_required')"
         ),
+        CheckConstraint(
+            "(assessment_status = 'succeeded') = (aggregate_result is not null)",
+            name="ck_attempt_result_only_when_succeeded",
+        ),
     )
     id: Mapped[uuid.UUID] = _id()
     exercise_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("exercise.id"), nullable=False)
@@ -233,6 +238,8 @@ class Attempt(Base):
     assessment_status: Mapped[str] = mapped_column(Text, nullable=False, default="pending")
     criterion_results: Mapped[list | None] = mapped_column(JSONB)
     aggregate_result: Mapped[str | None] = mapped_column(Text)
+    assessor_id: Mapped[str | None] = mapped_column(Text)
+    assessment_error: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = _now()
     assessed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 

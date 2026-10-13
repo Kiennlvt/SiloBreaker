@@ -12,9 +12,9 @@ error class, never evidence text.
 import json
 import logging
 import time
-from typing import Any
+from typing import Any, TypeVar
 
-from pydantic import ValidationError
+from pydantic import BaseModel, ValidationError
 
 from app.analysis.contract import BundleView, Extraction
 from app.errors import AppError
@@ -45,6 +45,7 @@ Rules:
   those itself.
 """
 
+T = TypeVar("T", bound=BaseModel)
 TRANSIENT_NAMES = {"APIConnectionError", "RateLimitError", "InternalServerError"}
 
 
@@ -56,11 +57,12 @@ def _is_transient(exc: BaseException) -> bool:
     return isinstance(exc, ConnectionError) or type(exc).__name__ in TRANSIENT_NAMES
 
 
-class OpenAIExtractor:
-    """`client` is an openai.OpenAI instance, or any object with the same
-    `chat.completions.create` shape (tests pass a fake; no network is used)."""
+class StructuredCall:
+    """One bounded, schema-checked model call shared by every AI stage.
 
-    prompt_version = "detect/1"
+    `client` is an openai.OpenAI instance, or any object with the same
+    `chat.completions.create` shape (tests pass a fake; no network is used).
+    """
 
     def __init__(
         self,
@@ -72,43 +74,42 @@ class OpenAIExtractor:
     ):
         self.client = client
         self.model = model
-        self.model_id = f"openai:{model}"
         self.timeout_seconds = timeout_seconds
         self.max_retries = max_retries
         self.max_calls = max_calls
 
-    def request(self, view: BundleView) -> dict:
-        """Exact request body; exposed so tests can check what the model sees."""
+    def request(self, system: str, user: str, schema: type[T], name: str) -> dict:
         return {
             "model": self.model,
             "messages": [
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": view.model_dump_json()},
+                {"role": "system", "content": system},
+                {"role": "user", "content": user},
             ],
             "response_format": {
                 "type": "json_schema",
-                "json_schema": {"name": "extraction", "schema": Extraction.model_json_schema()},
+                "json_schema": {"name": name, "schema": schema.model_json_schema()},
             },
             "temperature": 0,
             "timeout": self.timeout_seconds,
         }
 
-    def extract(self, view: BundleView) -> Extraction:
-        body = self.request(view)
+    def run(self, system: str, user: str, schema: type[T], name: str) -> T:
+        body = self.request(system, user, schema, name)
         attempts = min(1 + self.max_retries, self.max_calls)
         last: BaseException | None = None
         for attempt in range(1, attempts + 1):
             start = time.perf_counter()
             try:
                 response = self.client.chat.completions.create(**body)
-                return self._parse(response)
+                return self._parse(response, schema)
             except AppError:
                 raise
             except Exception as exc:
                 last = exc
                 log.warning(
-                    "extract model=%s attempt=%d/%d failed: %s after %.0f ms",
-                    self.model_id,
+                    "%s model=%s attempt=%d/%d failed: %s after %.0f ms",
+                    name,
+                    self.model,
                     attempt,
                     attempts,
                     type(exc).__name__,
@@ -125,13 +126,28 @@ class OpenAIExtractor:
             502, "provider_error", f"model call failed ({type(last).__name__})"
         ) from last
 
-    def _parse(self, response: Any) -> Extraction:
+    def _parse(self, response: Any, schema: type[T]) -> T:
         message = response.choices[0].message
         if getattr(message, "refusal", None):
-            raise AppError(502, "provider_error", "model refused the extraction request")
+            raise AppError(502, "provider_error", "model refused the request")
         try:
-            return Extraction.model_validate(json.loads(message.content or ""))
+            return schema.model_validate(json.loads(message.content or ""))
         except (json.JSONDecodeError, ValidationError) as exc:
             raise AppError(
-                502, "provider_error", "model output did not match the extraction schema"
+                502, "provider_error", "model output did not match the expected schema"
             ) from exc
+
+
+class OpenAIExtractor:
+    prompt_version = "detect/1"
+
+    def __init__(self, client: Any, model: str, **limits: Any):
+        self.call = StructuredCall(client, model, **limits)
+        self.model_id = f"openai:{model}"
+
+    def request(self, view: BundleView) -> dict:
+        """Exact request body; exposed so tests can check what the model sees."""
+        return self.call.request(SYSTEM_PROMPT, view.model_dump_json(), Extraction, "extraction")
+
+    def extract(self, view: BundleView) -> Extraction:
+        return self.call.run(SYSTEM_PROMPT, view.model_dump_json(), Extraction, "extraction")

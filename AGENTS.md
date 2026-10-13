@@ -7,7 +7,8 @@ Rules for any coding agent (or human) working in this repository. Specs live in 
 - Modular monolith: `frontend/` (React + TS + Vite), `backend/` (FastAPI + Pydantic + SQLAlchemy), PostgreSQL.
 - Backend modules: `evidence` (adapters, import, chunking), `analysis` (extraction contract, citation
   validation, offline extractor), `scoring` (pure deterministic rules), `knowledge` (capture, approval,
-  OKF), `api` (routes, serializers), `operations` (idempotency), `audit`.
+  OKF), `verify` (exercise contract, generation, assessment, aggregate rules), `api` (routes,
+  serializers), `operations` (idempotency), `audit`.
 - The model **proposes**; application code **decides**. Numbers, gates, lifecycle transitions and
   approval live in code, never in model output.
 - No microservices, queues or vector stores without a measured need.

@@ -27,35 +27,48 @@ FACET_QUESTIONS = {
 }
 
 
+def ai_limits() -> dict:
+    s = get_settings()
+    return {
+        "timeout_seconds": s.ai_timeout_seconds,
+        "max_retries": s.ai_max_retries,
+        "max_calls": s.ai_max_calls_per_stage,
+    }
+
+
+def require_openai():
+    """Returns the openai module, or a clear 503 when the provider is not usable."""
+    settings = get_settings()
+    if not settings.openai_api_key:
+        raise AppError(
+            503, "provider_not_configured", "SB_AI_PROVIDER=openai but SB_OPENAI_API_KEY is not set"
+        )
+    try:
+        import openai  # only needed in this mode: pip install -e ".[ai]"
+    except ImportError as exc:
+        raise AppError(
+            503,
+            "provider_not_configured",
+            'SB_AI_PROVIDER=openai needs the "ai" extra: pip install -e ".[ai]"',
+        ) from exc
+    return openai
+
+
+def openai_client(openai):
+    # SDK retries are off: StructuredCall owns the bounded retry budget.
+    return openai.OpenAI(api_key=get_settings().openai_api_key, max_retries=0)
+
+
 def get_extractor() -> Extractor:
     settings = get_settings()
     provider = settings.ai_provider
     if provider == "offline":
         return OfflineExtractor()
     if provider == "openai":
-        if not settings.openai_api_key:
-            raise AppError(
-                503,
-                "provider_not_configured",
-                "SB_AI_PROVIDER=openai but SB_OPENAI_API_KEY is not set",
-            )
-        try:
-            import openai  # only needed in this mode: pip install -e ".[ai]"
-        except ImportError as exc:
-            raise AppError(
-                503,
-                "provider_not_configured",
-                "SB_AI_PROVIDER=openai needs the 'ai' extra: pip install -e \".[ai]\"",
-            ) from exc
+        openai = require_openai()
         from app.analysis.openai_extractor import OpenAIExtractor
 
-        return OpenAIExtractor(
-            openai.OpenAI(api_key=settings.openai_api_key, max_retries=0),
-            settings.openai_model,
-            timeout_seconds=settings.ai_timeout_seconds,
-            max_retries=settings.ai_max_retries,
-            max_calls=settings.ai_max_calls_per_stage,
-        )
+        return OpenAIExtractor(openai_client(openai), settings.openai_model, **ai_limits())
     raise AppError(
         503, "provider_not_configured", f"AI provider '{provider}' is not configured in this build"
     )

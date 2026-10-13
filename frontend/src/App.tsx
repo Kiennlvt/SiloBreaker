@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
-import { api, ApiError } from "./api";
-import CapturePanel from "./components/CapturePanel";
+import { api } from "./api";
+import CapturePanel, { type VerifyTarget } from "./components/CapturePanel";
+import ErrorNotice from "./components/ErrorNotice";
 import EvidenceDrawer from "./components/EvidenceDrawer";
 import FindingCard from "./components/FindingCard";
+import VerifyPanel from "./components/VerifyPanel";
 import type { Analysis, Bundle, EvidenceRef, Handoff } from "./types";
 
 export default function App() {
@@ -14,14 +16,15 @@ export default function App() {
   const [selectedEngineer, setSelectedEngineer] = useState("alice");
   const [focus, setFocus] = useState<string | null>(null);
   const [evidence, setEvidence] = useState<EvidenceRef[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [verifyTarget, setVerifyTarget] = useState<VerifyTarget>(null);
+  const [error, setError] = useState<unknown>(null);
   const [busy, setBusy] = useState<string | null>(null);
 
   useEffect(() => {
     api
       .importBundle()
       .then(setBundle)
-      .catch((e: ApiError) => setError(e.message));
+      .catch(setError);
   }, []);
 
   const run = async (label: string, fn: () => Promise<void>) => {
@@ -30,7 +33,7 @@ export default function App() {
     try {
       await fn();
     } catch (e) {
-      setError(e instanceof ApiError ? `${e.message} (${e.code})` : String(e));
+      setError(e);
     } finally {
       setBusy(null);
     }
@@ -42,6 +45,7 @@ export default function App() {
       setHandoff(null);
       setAnalysis(null);
       setFocus(null);
+      setVerifyTarget(null);
     });
 
   const start = () =>
@@ -85,10 +89,10 @@ export default function App() {
         </button>
       </header>
 
-      {error && (
-        <p className="error banner" role="alert">
-          {error}
-        </p>
+      {error !== null && (
+        <div className="banner">
+          <ErrorNotice error={error} onReload={() => window.location.reload()} />
+        </div>
       )}
       {busy && (
         <p className="busy" role="status">
@@ -187,7 +191,14 @@ export default function App() {
                 key={f.id}
                 finding={f}
                 selected={focus === f.id}
-                onSelect={selectedEngineer === handoff?.expert_id ? () => setFocus(f.id) : undefined}
+                onSelect={
+                  selectedEngineer === handoff?.expert_id
+                    ? () => {
+                        setVerifyTarget(null);
+                        setFocus(f.id);
+                      }
+                    : undefined
+                }
                 onEvidence={() => setEvidence(f.evidence_refs)}
               />
             ))}
@@ -201,20 +212,32 @@ export default function App() {
 
           <div className="side">
             {focus ? (
-              <CapturePanel findingId={focus} onChanged={refreshAnalysis} />
+              <CapturePanel
+                key={focus}
+                findingId={focus}
+                onChanged={refreshAnalysis}
+                onVerifyTarget={setVerifyTarget}
+              />
             ) : (
               <section className="panel empty">
                 <p className="eyebrow">Step 2 · Capture</p>
                 <p>Choose a candidate and review it with the experienced engineer.</p>
               </section>
             )}
-            <section className="panel empty">
-              <p className="eyebrow">Step 3 · Verify</p>
-              <p className="muted">
-                Exercise generation and successor assessment are the next build milestone. Approved versions are already
-                stored immutably for them to reference.
-              </p>
-            </section>
+            {focus && verifyTarget && handoff ? (
+              <VerifyPanel
+                key={verifyTarget.id}
+                versionId={verifyTarget.id}
+                versionNo={verifyTarget.version_no}
+                expertId={handoff.expert_id}
+                successorId={handoff.successor_id}
+              />
+            ) : (
+              <section className="panel empty">
+                <p className="eyebrow">Step 3 · Verify</p>
+                <p className="muted">Approve a Knowledge Unit first; exercises can only use approved knowledge.</p>
+              </section>
+            )}
           </div>
         </main>
       )}

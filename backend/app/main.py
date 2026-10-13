@@ -6,6 +6,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.routes import router
+from app.api.verify_routes import router as verify_router
 from app.config import get_settings
 from app.errors import AppError, app_error_handler
 
@@ -24,6 +25,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 app.include_router(router)
+app.include_router(verify_router)
 
 
 @app.middleware("http")

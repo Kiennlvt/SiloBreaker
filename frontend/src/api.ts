@@ -1,5 +1,8 @@
 import type {
   Analysis,
+  Attempt,
+  Criterion,
+  Exercise,
   Bundle,
   Chunk,
   Draft,
@@ -15,9 +18,36 @@ export class ApiError extends Error {
     public status: number,
     public code: string,
     message: string,
+    // Safe identifiers the backend adds to recover, e.g. attempt_id after a provider failure.
+    public extra: Record<string, string> = {},
   ) {
     super(message);
   }
+}
+
+const PROVIDER_CODES = new Set(["provider_error", "provider_timeout", "provider_not_configured"]);
+
+export type ErrorKind = "stale" | "provider" | "network" | "other";
+
+/** Classifies an error so stale data and provider failures get their own message. */
+export function describeError(e: unknown): { kind: ErrorKind; message: string } {
+  if (!(e instanceof ApiError)) return { kind: "other", message: String(e) };
+  if (e.status === 409 && e.code === "stale_revision")
+    return { kind: "stale", message: "Dữ liệu đã thay đổi, tải lại để xem phiên bản mới nhất." };
+  if (e.status >= 500 && PROVIDER_CODES.has(e.code)) {
+    const what =
+      e.code === "provider_timeout"
+        ? "The AI provider did not answer in time"
+        : e.code === "provider_not_configured"
+          ? "The AI provider is not configured"
+          : "The AI provider failed";
+    return {
+      kind: "provider",
+      message: `${what}. This is a system error, not a result about anyone's knowledge. (${e.code})`,
+    };
+  }
+  if (e.code === "network") return { kind: "network", message: e.message };
+  return { kind: "other", message: `${e.message} (${e.code})` };
 }
 
 async function call<T>(method: string, path: string, body?: unknown, idempotent = false): Promise<T> {
@@ -37,14 +67,15 @@ async function call<T>(method: string, path: string, body?: unknown, idempotent 
   if (!res.ok) {
     let code = "http_error";
     let detail = text || res.statusText;
+    let extra: Record<string, string> = {};
     try {
       const j = JSON.parse(text);
-      if (j.error) ({ code, detail } = j.error);
+      if (j.error) ({ code, detail, ...extra } = j.error);
       else if (j.detail) detail = typeof j.detail === "string" ? j.detail : JSON.stringify(j.detail);
     } catch {
       /* not JSON */
     }
-    throw new ApiError(res.status, code, detail);
+    throw new ApiError(res.status, code, detail, extra);
   }
   const type = res.headers.get("content-type") ?? "";
   return (type.includes("json") ? JSON.parse(text) : text) as T;
@@ -69,4 +100,23 @@ export const api = {
   publish: (id: string, b: { expected_finding_revision: number; draft_revision: number; approver_id: string }) =>
     call<KnowledgeVersion>("POST", `/findings/${id}/publish`, b, true),
   okf: (versionId: string) => call<string>("GET", `/knowledge/${versionId}/okf`),
+
+  // Verify. Reads pass viewer_id; the backend decides what that viewer may see.
+  createExercise: (versionId: string, actor: string) =>
+    call<Exercise>("POST", `/knowledge/${versionId}/exercises`, { actor_id: actor }, true),
+  listExercises: (versionId: string, viewer: string) =>
+    call<Exercise[]>("GET", `/knowledge/${versionId}/exercises?viewer_id=${encodeURIComponent(viewer)}`),
+  getExercise: (id: string, viewer: string) =>
+    call<Exercise>("GET", `/exercises/${id}?viewer_id=${encodeURIComponent(viewer)}`),
+  saveExerciseDraft: (
+    id: string,
+    b: { scenario: string; criteria: Criterion[]; expected_revision: number; actor_id: string },
+  ) => call<Exercise>("PUT", `/exercises/${id}/draft`, b),
+  approveExercise: (id: string, b: { expected_revision: number; actor_id: string }) =>
+    call<Exercise>("POST", `/exercises/${id}/approve`, b),
+  submitAttempt: (exerciseId: string, b: { actor_id: string; answer: string }) =>
+    call<Attempt>("POST", `/exercises/${exerciseId}/attempts`, b, true),
+  getAttempt: (id: string, viewer: string) =>
+    call<Attempt>("GET", `/attempts/${id}?viewer_id=${encodeURIComponent(viewer)}`),
+  reassess: (id: string, actor: string) => call<Attempt>("POST", `/attempts/${id}/reassess`, { actor_id: actor }),
 };

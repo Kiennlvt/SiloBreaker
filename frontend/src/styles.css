@@ -150,3 +150,28 @@ textarea { resize: vertical; }
 .evidence-text { background: var(--source-bg); border-radius: 6px; padding: 8px 10px; margin: 8px 0; font-size: 0.85rem; font-family: inherit; }
 .evidence-text mark { background: #ffe08a; padding: 0 2px; border-radius: 2px; }
 .src { font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--source); }
+
+/* Error kinds: stale data and provider failures are never shown as a generic error. */
+.error-stale { color: var(--system); background: var(--system-bg); border-radius: 8px; padding: 8px 12px; }
+.error-provider { color: var(--danger); background: #fbeaea; border-radius: 8px; padding: 8px 12px; }
+.error-stale p, .error-provider p { margin: 0 0 4px; }
+
+/* Verify */
+.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.role-switch { border: 1px solid var(--line); border-radius: 8px; padding: 4px 10px; display: flex; gap: 12px; font-size: 0.9rem; }
+.role-switch label { display: flex; gap: 4px; align-items: center; cursor: pointer; }
+.criterion { border-top: 1px dashed var(--line); padding: 8px 0; }
+.check { display: flex; gap: 6px; align-items: center; font-size: 0.85rem; color: var(--muted); }
+.attempts { display: grid; gap: 8px; }
+.attempt { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; display: grid; gap: 6px; }
+.result { font-weight: 600; border-radius: 6px; padding: 4px 8px; margin: 0; }
+.result-demonstrated { color: var(--human); background: var(--human-bg); }
+.result-partial, .result-review_required { color: var(--system); background: var(--system-bg); }
+.result-not_yet { color: var(--danger); background: #fbeaea; }
+.criteria-results { list-style: none; padding: 0; margin: 0; display: grid; gap: 6px; }
+.criteria-results q { display: block; margin-top: 2px; }
+.verdict-label { font-weight: 600; margin-right: 4px; }
+.verdict-met .verdict-label { color: var(--human); }
+.verdict-unmet .verdict-label { color: var(--danger); }
+.verdict-partial .verdict-label, .verdict-uncertain .verdict-label { color: var(--system); }
+.answer { white-space: pre-wrap; }

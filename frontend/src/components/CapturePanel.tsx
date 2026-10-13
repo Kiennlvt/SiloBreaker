@@ -1,7 +1,18 @@
 import { useCallback, useEffect, useState } from "react";
-import { api, ApiError } from "../api";
+import { api } from "../api";
 import type { FindingDetail, KnowledgeContent, KnowledgeVersion } from "../types";
+import ErrorNotice from "./ErrorNotice";
 import ListEditor from "./ListEditor";
+
+/** The approved version Verify should use: this finding's latest, or one approved earlier. */
+export type VerifyTarget = { id: string; version_no: number } | null;
+
+function verifyTarget(d: FindingDetail): VerifyTarget {
+  if (d.status === "rejected" || d.status === "obsolete") return null;
+  const latest = d.versions[d.versions.length - 1];
+  if (latest) return { id: latest.id, version_no: latest.version_no };
+  return d.prior_knowledge ? { id: d.prior_knowledge.version_id, version_no: d.prior_knowledge.version_no } : null;
+}
 
 const EMPTY: KnowledgeContent = {
   applicability: "",
@@ -26,9 +37,17 @@ function clean(c: KnowledgeContent): KnowledgeContent {
   };
 }
 
-export default function CapturePanel({ findingId, onChanged }: { findingId: string; onChanged: () => void }) {
+export default function CapturePanel({
+  findingId,
+  onChanged,
+  onVerifyTarget,
+}: {
+  findingId: string;
+  onChanged: () => void;
+  onVerifyTarget?: (t: VerifyTarget) => void;
+}) {
   const [detail, setDetail] = useState<FindingDetail | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<unknown>(null);
   const [busy, setBusy] = useState(false);
   const [reason, setReason] = useState("");
   const [answer, setAnswer] = useState("");
@@ -39,6 +58,7 @@ export default function CapturePanel({ findingId, onChanged }: { findingId: stri
   const load = useCallback(async () => {
     const d = await api.finding(findingId);
     setDetail(d);
+    onVerifyTarget?.(verifyTarget(d));
     if (d.draft) {
       setContent(d.draft.content);
       setDirty(false);
@@ -52,7 +72,7 @@ export default function CapturePanel({ findingId, onChanged }: { findingId: stri
     setAnswer("");
     setReason("");
     setContent(EMPTY);
-    load().catch((e: ApiError) => setError(e.message));
+    load().catch(setError);
   }, [load]);
 
   const run = async (fn: () => Promise<unknown>) => {
@@ -63,13 +83,19 @@ export default function CapturePanel({ findingId, onChanged }: { findingId: stri
       await load();
       onChanged();
     } catch (e) {
-      setError(e instanceof ApiError ? `${e.message} (${e.code})` : String(e));
+      setError(e);
     } finally {
       setBusy(false);
     }
   };
 
-  if (!detail) return <section className="panel">{error ? <p className="error">{error}</p> : <p>Loading…</p>}</section>;
+  const reload = () => {
+    setError(null);
+    load().catch(setError);
+  };
+
+  if (!detail)
+    return <section className="panel">{error ? <ErrorNotice error={error} onReload={reload} /> : <p>Loading…</p>}</section>;
 
   const expert = detail.handoff.expert_id;
   const edit = (patch: Partial<KnowledgeContent>) => {
@@ -90,11 +116,7 @@ export default function CapturePanel({ findingId, onChanged }: { findingId: stri
         </div>
         <span className="acting">Acting as {expert} (experienced engineer)</span>
       </header>
-      {error && (
-        <p className="error" role="alert">
-          {error}
-        </p>
-      )}
+      <ErrorNotice error={error} onReload={reload} />
 
       {detail.status === "candidate" && detail.prior_knowledge && (
         <p className="notice" role="status">
