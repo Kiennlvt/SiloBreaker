@@ -92,7 +92,7 @@ def demo(page, run):
     shot(page, run, "4-not-yet", verify)
 
     # Retry is a new attempt
-    verify.get_by_role("button", name="Thử lại").click()
+    verify.get_by_role("button", name="Try again").click()
     verify.get_by_label("Your answer").fill(SUCCESSOR["correct_paraphrase"])
     verify.get_by_role("button", name="Submit answer").click()
     expect(result).to_have_text("Demonstrated in this exercise")

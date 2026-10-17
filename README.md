@@ -57,7 +57,7 @@ sẽ đứng đầu với điểm 88; bấm **Inspect citations** để xem bằ
 để xác nhận, nhập câu trả lời của chuyên gia, lưu bản nháp, phê duyệt và xem file OKF. Ở bước
 **Verify**, bấm **Generate exercise**, xem rubric riêng tư rồi **Approve and release exercise**; chuyển
 sang **Successor (bob)** để trả lời (successor không thấy rubric), xem kết quả theo từng tiêu chí và
-bấm **Thử lại** để nộp attempt mới.
+bấm **Try again** để nộp attempt mới.
 
 ## Tests
 

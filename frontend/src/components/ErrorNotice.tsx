@@ -9,7 +9,7 @@ export default function ErrorNotice({ error, onReload }: { error: unknown; onRel
       <p>{message}</p>
       {kind === "stale" && onReload && (
         <button className="secondary small" onClick={onReload}>
-          Tải lại
+          Reload
         </button>
       )}
     </div>

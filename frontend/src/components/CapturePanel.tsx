@@ -120,8 +120,8 @@ export default function CapturePanel({
 
       {detail.status === "candidate" && detail.prior_knowledge && (
         <p className="notice" role="status">
-          Đã có v{detail.prior_knowledge.version_no} được duyệt cho khu vực này từ một phân tích trước của cùng handoff.
-          Kiến thức đó vẫn dùng được cho bước Verify; chỉ cần review lại nếu bạn muốn soạn một phiên bản mới.
+          Version v{detail.prior_knowledge.version_no} was already approved for this area in an earlier analysis of this
+          handoff. It can still be used in Verify; review again only if you want to draft a new version.
         </p>
       )}
 

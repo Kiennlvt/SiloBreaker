@@ -64,7 +64,7 @@ export default function FindingCard({
             <span className={`conf conf-${f.evidence_confidence}`}>{f.evidence_confidence} confidence</span>
             {f.status !== "candidate" && <span className={`review review-${f.status}`}>{f.status}</span>}
             {f.prior_knowledge && (
-              <span className="review review-confirmed">Đã có v{f.prior_knowledge.version_no} được duyệt</span>
+              <span className="review review-confirmed">v{f.prior_knowledge.version_no} already approved</span>
             )}
           </div>
         </div>

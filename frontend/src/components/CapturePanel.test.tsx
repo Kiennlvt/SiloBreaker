@@ -29,10 +29,10 @@ describe("CapturePanel", () => {
     render(<CapturePanel findingId="f1" onChanged={() => undefined} />);
     await userEvent.click(await screen.findByRole("button", { name: "Confirm" }));
     const alert = await screen.findByRole("alert");
-    expect(alert).toHaveTextContent(/dữ liệu đã thay đổi, tải lại/i);
+    expect(alert).toHaveTextContent(/this data has changed\. reload/i);
     expect(alert).not.toHaveTextContent("stale_revision");
     const calls = finding.mock.calls.length;
-    await userEvent.click(screen.getByRole("button", { name: "Tải lại" }));
+    await userEvent.click(screen.getByRole("button", { name: "Reload" }));
     expect(finding.mock.calls.length).toBe(calls + 1);
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
@@ -44,7 +44,7 @@ describe("CapturePanel", () => {
     await userEvent.click(await screen.findByRole("button", { name: "Confirm" }));
     const alert = await screen.findByRole("alert");
     expect(alert).toHaveTextContent("invalid_transition");
-    expect(screen.queryByRole("button", { name: "Tải lại" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Reload" })).not.toBeInTheDocument();
   });
 
   it("tells the expert when knowledge was already approved in an earlier analysis", async () => {
@@ -54,7 +54,7 @@ describe("CapturePanel", () => {
     });
     const target = vi.fn();
     render(<CapturePanel findingId="f1" onChanged={() => undefined} onVerifyTarget={target} />);
-    expect(await screen.findByText(/Đã có v1 được duyệt/)).toBeInTheDocument();
+    expect(await screen.findByText(/Version v1 was already approved/)).toBeInTheDocument();
     expect(target).toHaveBeenCalledWith({ id: "v1", version_no: 1 });
   });
 });

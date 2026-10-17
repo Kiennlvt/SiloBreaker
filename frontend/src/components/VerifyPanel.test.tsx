@@ -83,7 +83,7 @@ describe("VerifyPanel", () => {
     expect(submit).toHaveBeenCalledWith("ex1", { actor_id: "bob", answer: "I would retry it." });
     expect(await screen.findByText("Not yet demonstrated")).toBeInTheDocument();
     expect(screen.getByText(CRITERIA[0].text, { exact: false })).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: "Thử lại" }));
+    await userEvent.click(screen.getByRole("button", { name: "Try again" }));
     expect(screen.getByLabelText("Your answer")).toHaveValue("");
   });
 
@@ -106,7 +106,7 @@ describe("VerifyPanel", () => {
     await userEvent.click(screen.getByRole("button", { name: "Submit answer" }));
     await waitFor(() => expect(screen.getAllByRole("alert")[0]).toHaveTextContent(/system error/));
     expect(screen.queryByText("Not yet demonstrated")).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Chấm lại/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Assess again" })).toBeInTheDocument();
   });
 
   it("offers to generate when no exercise exists", async () => {

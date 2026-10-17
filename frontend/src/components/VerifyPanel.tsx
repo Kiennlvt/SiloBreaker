@@ -301,11 +301,11 @@ function SuccessorView({
             <AttemptCard attempt={last} index={attempts.length} />
             {last.assessment_status === "failed" ? (
               <button className="secondary" disabled={busy} onClick={() => onReassess(last.id)}>
-                Chấm lại (assess again)
+                Assess again
               </button>
             ) : (
               <button className="secondary" disabled={busy} onClick={() => setAnswering(true)}>
-                Thử lại
+                Try again
               </button>
             )}
           </>

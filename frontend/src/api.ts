@@ -33,7 +33,7 @@ export type ErrorKind = "stale" | "provider" | "network" | "other";
 export function describeError(e: unknown): { kind: ErrorKind; message: string } {
   if (!(e instanceof ApiError)) return { kind: "other", message: String(e) };
   if (e.status === 409 && e.code === "stale_revision")
-    return { kind: "stale", message: "Dữ liệu đã thay đổi, tải lại để xem phiên bản mới nhất." };
+    return { kind: "stale", message: "This data has changed. Reload to see the latest version." };
   if (e.status >= 500 && PROVIDER_CODES.has(e.code)) {
     const what =
       e.code === "provider_timeout"
