@@ -14,7 +14,7 @@ const SOURCE_STATE_HELP: Record<string, string> = {
 
 export default function HandoffsPage() {
   const navigate = useNavigate();
-  const { data, error, reload, setData } = useLoad(async () => {
+  const { data, error, reload } = useLoad(async () => {
     const [bundle, handoffs, members] = await Promise.all([
       api.importBundle(),
       api.handoffs(),
@@ -69,8 +69,8 @@ export default function HandoffsPage() {
     if (!window.confirm("Reset the demo? All handoffs, findings, knowledge and attempts are deleted. Accounts stay."))
       return;
     run("Resetting demo", async () => {
-      const bundle = await api.reset();
-      setData((d) => (d ? { ...d, bundle, handoffs: [] } : d));
+      await api.reset();
+      await reload(); // fresh from the server, never a patch of a list loaded before the reset
     });
   };
 
@@ -80,7 +80,7 @@ export default function HandoffsPage() {
     <section className="stack" aria-labelledby="handoffs-title">
       <div className="row between wrap gap-s">
         <h2 id="handoffs-title">Handoffs</h2>
-        <button className="danger" onClick={reset} disabled={!!busy}>
+        <button className="danger" onClick={reset} disabled={!!busy || !data}>
           Reset demo
         </button>
       </div>
