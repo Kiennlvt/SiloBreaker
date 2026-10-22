@@ -20,9 +20,21 @@ export type Handoff = {
   bundle_id: string;
   expert_id: string;
   successor_id: string;
+  status?: string;
+  created_at?: string;
+};
+
+export type HandoffRole = "admin" | "expert" | "successor";
+
+export type HandoffSummary = Handoff & { viewer_role: HandoffRole };
+
+export type HandoffDetail = HandoffSummary & {
+  // Absent for the successor, who works from released exercises only.
+  analyses?: { id: string; selected_engineer_id: string; created_at: string }[];
 };
 
 export type Signal = number | null;
+export type SignalKey = "A" | "D" | "O" | "M" | "B";
 export type EvidenceRef = { chunk_id: string; quote: string; event?: string; document?: string };
 
 export type PriorKnowledge = { finding_id: string; version_id: string; version_no: number };
@@ -33,9 +45,13 @@ export type Finding = {
   title: string;
   summary: string;
   question: string | null;
-  signals: Record<"A" | "D" | "O" | "M" | "B", Signal>;
+  signals: Record<SignalKey, Signal>;
   counts: Record<string, number | null>;
   raw_score: number | null;
+  // Score breakdown computed by the backend; the browser only draws it.
+  weights: Record<SignalKey, number>;
+  contributions: Record<SignalKey, number | null>;
+  cap: number;
   reasons: string[];
   missing_facets: string[];
   top_candidate: boolean;
@@ -97,6 +113,7 @@ export type Draft = { id: string; revision: number; content: KnowledgeContent };
 
 export type KnowledgeVersion = {
   id: string;
+  finding_id: string;
   version_no: number;
   draft_revision: number;
   approved_content: KnowledgeContent;
@@ -151,11 +168,71 @@ export type Exercise = {
   status: "draft" | "ready" | "obsolete";
   scenario: string;
   approved_at: string | null;
-  viewer_role: "expert" | "successor";
+  viewer_role: HandoffRole;
   attempts: Attempt[];
-  // expert view only
+  // expert and admin view only
   revision?: number;
   approved_by?: string | null;
   generator_id?: string | null;
   criteria?: Criterion[];
+};
+
+// ---------- Accounts ----------
+
+export type Role = "admin" | "member";
+
+export type User = {
+  id: string;
+  username: string;
+  display_name: string | null;
+  role: Role;
+  person_id: string | null;
+};
+
+export type AdminUser = User & { is_active: boolean; created_at: string; last_login_at: string | null };
+
+export type Page<T> = { items: T[]; total: number; page: number; size: number };
+
+export type AuditEvent = {
+  id: number;
+  handoff_id: string | null;
+  actor_id: string;
+  action: string;
+  target_type: string;
+  target_id: string;
+  target_revision: number | null;
+  metadata: Record<string, unknown>;
+  created_at: string;
+};
+
+export type MyExercise = {
+  id: string;
+  status: Exercise["status"];
+  viewer_role: HandoffRole;
+  handoff_id: string;
+  project_key: string;
+  finding_id: string;
+  area_key: string;
+  title: string;
+  knowledge_version_id: string;
+  knowledge_version_no: number;
+  approved_at: string | null;
+  latest_attempt: {
+    id: string;
+    assessment_status: Attempt["assessment_status"];
+    aggregate_result: AggregateResult | null;
+    created_at: string;
+  } | null;
+};
+
+export type LibraryEntry = {
+  version_id: string;
+  version_no: number;
+  finding_id: string;
+  area_key: string;
+  title: string;
+  project_key: string;
+  handoff_id: string;
+  approved_by: string;
+  approved_at: string;
 };

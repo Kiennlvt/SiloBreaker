@@ -2,7 +2,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { api, ApiError } from "../api";
-import type { Attempt, Exercise } from "../types";
+import type { Attempt, Exercise, HandoffRole } from "../types";
 import VerifyPanel from "./VerifyPanel";
 
 const SCENARIO = "You are on call for settlement recovery. Describe what you do.";
@@ -42,8 +42,10 @@ const graded: Attempt = {
 
 afterEach(() => vi.restoreAllMocks());
 
-function renderPanel(role: "expert" | "successor") {
-  return render(<VerifyPanel versionId="v1" versionNo={1} expertId="alice" successorId="bob" initialRole={role} />);
+// The page only says which view it expects; once an exercise exists, its viewer_role
+// (decided by the backend from the signed-in account) wins.
+function renderPanel(expectedRole: HandoffRole) {
+  return render(<VerifyPanel versionId="v1" versionNo={1} expectedRole={expectedRole} />);
 }
 
 describe("VerifyPanel", () => {
@@ -51,7 +53,7 @@ describe("VerifyPanel", () => {
     const list = vi.spyOn(api, "listExercises").mockResolvedValue([successorView]);
     const { container } = renderPanel("successor");
     expect(await screen.findByText(SCENARIO)).toBeInTheDocument();
-    expect(list).toHaveBeenCalledWith("v1", "bob");
+    expect(list).toHaveBeenCalledWith("v1");
     expect(screen.getByLabelText("Your answer")).toBeInTheDocument();
     const html = container.innerHTML.toLowerCase();
     expect(html).not.toContain("rubric");
@@ -59,17 +61,32 @@ describe("VerifyPanel", () => {
     for (const c of CRITERIA) expect(container.textContent).not.toContain(c.text);
   });
 
-  it("shows the rubric to the expert and switches viewer by role", async () => {
-    const list = vi
-      .spyOn(api, "listExercises")
-      .mockImplementation(async (_v, viewer) => (viewer === "alice" ? [expertView] : [successorView]));
+  it("shows the rubric to the expert and offers no viewer switch", async () => {
+    vi.spyOn(api, "listExercises").mockResolvedValue([expertView]);
     renderPanel("expert");
     expect(await screen.findByText(/Private rubric/)).toBeInTheDocument();
     expect(screen.getByDisplayValue(CRITERIA[0].text)).toBeInTheDocument();
-    await userEvent.click(screen.getByLabelText("Successor (bob)"));
-    await screen.findByLabelText("Your answer");
-    expect(list).toHaveBeenLastCalledWith("v1", "bob");
-    expect(screen.queryByText(/Private rubric/)).not.toBeInTheDocument();
+    expect(screen.getByText("You are the experienced engineer")).toBeInTheDocument();
+    expect(screen.queryByRole("radio")).not.toBeInTheDocument();
+  });
+
+  it("follows the backend's viewer_role, not the page's expectation", async () => {
+    // A successor who opens the expert URL still gets the successor payload and view.
+    vi.spyOn(api, "listExercises").mockResolvedValue([successorView]);
+    const { container } = renderPanel("expert");
+    expect(await screen.findByLabelText("Your answer")).toBeInTheDocument();
+    expect(container.innerHTML.toLowerCase()).not.toContain("rubric");
+  });
+
+  it("gives an admin a read-only view with no authoring or answering", async () => {
+    vi.spyOn(api, "listExercises").mockResolvedValue([
+      { ...expertView, viewer_role: "admin", status: "draft" },
+    ]);
+    renderPanel("admin");
+    expect(await screen.findByText(/Private rubric/)).toBeInTheDocument();
+    expect(screen.getByText("Administrator view (read only)")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Save exercise draft|Approve and release/ })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Your answer")).not.toBeInTheDocument();
   });
 
   it("shows criterion-level results from the backend and lets the successor retry", async () => {
@@ -80,7 +97,7 @@ describe("VerifyPanel", () => {
     renderPanel("successor");
     await userEvent.type(await screen.findByLabelText("Your answer"), "I would retry it.");
     await userEvent.click(screen.getByRole("button", { name: "Submit answer" }));
-    expect(submit).toHaveBeenCalledWith("ex1", { actor_id: "bob", answer: "I would retry it." });
+    expect(submit).toHaveBeenCalledWith("ex1", { answer: "I would retry it." });
     expect(await screen.findByText("Not yet demonstrated")).toBeInTheDocument();
     expect(screen.getByText(CRITERIA[0].text, { exact: false })).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Try again" }));
@@ -109,9 +126,18 @@ describe("VerifyPanel", () => {
     expect(screen.getByRole("button", { name: "Assess again" })).toBeInTheDocument();
   });
 
-  it("offers to generate when no exercise exists", async () => {
+  it("offers to generate when no exercise exists, without naming an actor", async () => {
     vi.spyOn(api, "listExercises").mockResolvedValue([]);
+    const create = vi.spyOn(api, "createExercise").mockResolvedValue(expertView);
     renderPanel("expert");
-    expect(await screen.findByRole("button", { name: "Generate exercise" })).toBeInTheDocument();
+    await userEvent.click(await screen.findByRole("button", { name: "Generate exercise" }));
+    expect(create).toHaveBeenCalledWith("v1");
+  });
+
+  it("tells the successor when nothing has been released yet", async () => {
+    vi.spyOn(api, "listExercises").mockResolvedValue([]);
+    renderPanel("successor");
+    expect(await screen.findByText(/has not released an exercise/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Generate exercise" })).not.toBeInTheDocument();
   });
 });

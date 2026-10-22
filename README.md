@@ -18,7 +18,10 @@ Human approval is the boundary between system interpretation and approved knowle
 | Capture: review, revisioned drafts, explicit approval, immutable versions, OKF export with derived lifecycle (active/superseded/retired) | Done |
 | Verify: exercise generation, expert rubric review/release, successor attempts, criterion-level assessment, deterministic aggregate, retry/reassess | Done |
 | Model-backed extractor/generator/assessor (`SB_AI_PROVIDER=openai`) | Implemented and tested with a fake client; not exercised against a live model |
-| Authentication | Backend done: accounts, sessions, server-side authorization. Frontend not migrated yet (see below) |
+| Authentication: argon2 passwords, server-side sessions (HttpOnly cookie), role-based authorization on every route, admin user management, audit log | Done |
+| Multi-page website: `/login`, `/admin/*`, `/expert/*`, `/learn/*`, `/library`; SVG score chart | Done |
+| Browser e2e of the signed-in flow across admin, expert and successor (`e2e/demo_flow.py`) | Done |
+| Production hardening: HTTPS (`SB_SESSION_COOKIE_SECURE=true`), login rate limiting, password policy beyond length | Not done |
 
 ## Quick start / Chạy nhanh
 
@@ -33,6 +36,7 @@ cd backend
 python -m venv .venv && source .venv/bin/activate     # Windows: .venv\Scripts\activate
 pip install -e ".[dev]"            # add ,e2e for Playwright and ,ai for the OpenAI extractor
 alembic upgrade head
+python -m app.seed_users           # creates or updates the three demo accounts (safe to re-run)
 uvicorn app.main:app --reload --port 8000
 
 # 3. Frontend on http://localhost:5173  (new terminal)
@@ -40,6 +44,9 @@ cd frontend
 npm install
 npm run dev
 ```
+
+Then open http://localhost:5173/login and sign in with one of the demo accounts below.
+[`docs/DEMO.md`](docs/DEMO.md) is a five-minute demo script with answers to copy.
 
 Optional dependency groups in `backend/pyproject.toml`:
 
@@ -52,21 +59,45 @@ Optional dependency groups in `backend/pyproject.toml`:
 Without Docker, use a local PostgreSQL (user/password `postgres/postgres`), create the
 `silobreaker` database and run `scripts/create-test-db.sql`.
 
-Mở http://localhost:5173, chọn Alice → Bob, bấm **Start handoff and analyse**. Settlement recovery
-sẽ đứng đầu với điểm 88; bấm **Inspect citations** để xem bằng chứng gốc, rồi **Review with expert**
-để xác nhận, nhập câu trả lời của chuyên gia, lưu bản nháp, phê duyệt và xem file OKF. Ở bước
-**Verify**, bấm **Generate exercise**, xem rubric riêng tư rồi **Approve and release exercise**; chuyển
-sang **Successor (bob)** để trả lời (successor không thấy rubric), xem kết quả theo từng tiêu chí và
-bấm **Try again** để nộp attempt mới.
+### Demo accounts (demo only)
+
+These accounts and passwords exist only for the local demo with synthetic data. Never reuse them,
+and never seed them in a real deployment.
+
+| Username | Password (demo only) | System role | Role in the demo handoff |
+|---|---|---|---|
+| `admin` | `Admin@123` | admin | none: creates the handoff, runs the analysis, reads the audit log |
+| `alice` | `Alice@123` | member | experienced engineer (expert), person `alice` in the evidence |
+| `bob` | `Bob@123` | member | successor, person `bob` |
+
+- The successor can be a new hire from outside who does not appear in the evidence: any active
+  member account will do. Only the expert must appear in the evidence.
+- Separation of duties: an admin sets things up and can read everything, but cannot review,
+  approve or publish knowledge, author exercises or answer them, and can never be the expert or
+  the successor of a handoff.
+
+### Walkthrough / Hướng dẫn
+
+1. Đăng nhập `admin` → **Handoffs** → **Reset demo** → tạo handoff Alice → Bob → **Run analysis**.
+   Log out.
+2. Đăng nhập `alice` → **My handoffs** → **Open Detect**. Settlement recovery đứng đầu với điểm 88;
+   biểu đồ cho thấy đóng góp của từng tín hiệu, Webhooks bị cap tại 60. **Inspect citations** để xem
+   bằng chứng gốc, **Review with expert** → **Confirm**, nhập câu trả lời, **Save draft**,
+   **Approve**, **View OKF export**. Mở **Open exercise for v1** → **Generate exercise** → xem rubric
+   riêng tư → **Approve and release exercise**. Log out.
+3. Đăng nhập `bob` → **Learning** → mở bài tập (successor không thấy rubric), nộp câu trả lời, xem
+   kết quả theo từng tiêu chí, **Try again** để nộp attempt mới.
+4. Đăng nhập `admin` → **Audit log** để xem hành động của cả ba người.
 
 ## Tests
 
 ```bash
-cd backend && pytest -q          # 93 tests against PostgreSQL (silobreaker_test)
+cd backend && pytest -q          # 134 tests against PostgreSQL (silobreaker_test)
+cd backend && ruff check app tests && ruff format --check app tests
+cd frontend && npm test          # 29 Vitest tests (jsdom)
 cd frontend && npm run build     # type-check + build
-cd frontend && npm test          # 11 Vitest tests (jsdom)
 pip install -e "backend[e2e]" && playwright install chromium
-python e2e/demo_flow.py --runs 3 # full 4-minute flow; API and dev server must be running
+python e2e/demo_flow.py --runs 3 # admin -> expert -> successor -> audit; API (seeded) and dev server running
 # If the Chromium download is blocked: SB_E2E_BROWSER_CHANNEL=chrome (or msedge) uses an installed browser
 ```
 
@@ -75,25 +106,44 @@ The suite covers rubric privacy, critical omissions, paraphrase matching, provid
 counting, actor change, prompt injection in evidence, citation resolution and rejection,
 idempotency, stale revisions, immutability enforced by database triggers, and OKF export. It also
 reproduces the exhaustive scoring analysis (243 configurations) reported in the project report.
+`tests/test_auth.py` and `tests/test_permissions.py` cover sign-in, sessions, deactivation and
+the role rules below, including that an `actor_id` sent in a request body has no effect.
 
-## Security status: accounts and server-side authorization
+## Accounts, sessions and permissions
 
-Every API route except `/api/health` and `/api/auth/login` requires a signed-in session
-(`sb_session`, HttpOnly, SameSite=Lax, 8 hours, stored server-side as a token hash). The acting
-person is always the account's `person_id`; request bodies and query strings no longer carry
-`actor_id`, `author_id`, `approver_id` or `viewer_id`. Write requests must send
-`X-Requested-With: silobreaker`.
+**Sessions.** `POST /api/auth/login` checks the password against an argon2 hash and creates a
+server-side session. The browser gets a random token in the `sb_session` cookie (HttpOnly,
+SameSite=Lax, 8 hours); the database stores only its SHA-256 hash. `POST /api/auth/logout`
+revokes the session. A wrong username and a wrong password get the same `401
+invalid_credentials`. Deactivating an account or resetting its password revokes all of its
+sessions. Logins (successful and failed) and logouts are written to the audit log.
 
-- **admin**: imports bundles, resets the demo, creates handoffs, runs analyses, manages users,
-  reads the audit log and everything else; never reviews, captures, publishes, authors
-  exercises or answers them.
-- **handoff expert**: runs analyses, Capture and Verify authoring.
-- **handoff successor**: released exercises (no rubric), own attempts and results.
-- **everyone signed in**: approved knowledge and OKF (`/api/library`).
+**Authorization lives on the server.** Every API route except `/api/health` and
+`/api/auth/login` needs a live session. The acting person is always the signed-in account's
+`person_id`; no request body or query string names an actor. Write requests (POST, PUT, PATCH,
+DELETE) must send `X-Requested-With: silobreaker`, which a cross-site form cannot set. The
+website hides what a role cannot do, but the backend checks every call again.
+`POST /api/demo/reset` clears workflow data and keeps accounts and sessions.
 
-Demo accounts: `cd backend && python -m app.seed_users` creates `admin`, `alice`, `bob`
-(passwords in `app/seed_users.py`; demo data only). The React frontend and `e2e/demo_flow.py`
-still use the old unauthenticated API and will be migrated in the next phase.
+| Action | admin | Handoff expert | Handoff successor | Any other member |
+|---|---|---|---|---|
+| Manage users, read the audit log | ✓ | | | |
+| Import bundle, reset demo, create handoffs | ✓ | | | |
+| Run an analysis | ✓ | ✓ | | |
+| Read analyses and findings | ✓ (read only) | ✓ | | |
+| Review, draft and approve knowledge (Capture) | | ✓ | | |
+| Generate, edit and release exercises | | ✓ | | |
+| See the private rubric | ✓ (read only) | ✓ | | |
+| See released exercises and answer them | | | ✓ | |
+| See attempts and results | ✓ | ✓ | own only | |
+| Read approved knowledge and OKF (`/library`) | ✓ | ✓ | ✓ | ✓ |
+
+Handoff rules: the expert must be an active member who appears in the evidence; the successor
+must be an active member but may be new to the project (an external hire); they must differ, and
+an admin can be neither. A new member's `person_id` defaults to their username.
+
+Not yet done for production: HTTPS with `SB_SESSION_COOKIE_SECURE=true`, login rate limiting,
+and a password policy beyond the 8-character minimum.
 
 ## Repository layout
 
@@ -103,7 +153,9 @@ backend/
   app/analysis/    extraction contract, citation validation, offline extractor, Detect flow
   app/scoring/     deterministic signals, gates, caps, confidence (pure functions)
   app/knowledge/   review, drafts, approval, immutable versions, OKF renderer
-  app/api/         FastAPI routes
+  app/auth/        password hashing, server-side sessions, login/logout, authorization dependencies
+  app/api/         FastAPI routes (including admin users/audit, library, my exercises)
+  app/seed_users.py  demo accounts (python -m app.seed_users)
   migrations/      Alembic, including immutability triggers
   tests/
 frontend/          React + TypeScript + Vite

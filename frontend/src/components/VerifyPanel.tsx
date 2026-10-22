@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { api, ApiError } from "../api";
-import type { AggregateResult, Attempt, Criterion, Exercise, Verdict } from "../types";
+import type { AggregateResult, Attempt, Criterion, Exercise, HandoffRole, Verdict } from "../types";
 import ErrorNotice from "./ErrorNotice";
 
 // Labels only. Every verdict and result comes from the backend; nothing is scored here.
@@ -10,6 +10,11 @@ const RESULT_LABEL: Record<AggregateResult, string> = {
   not_yet: "Not yet demonstrated",
   review_required: "Review required by the expert",
 };
+const ROLE_VIEW: Record<HandoffRole, string> = {
+  expert: "You are the experienced engineer",
+  successor: "You are the successor",
+  admin: "Administrator view (read only)",
+};
 const VERDICT_LABEL: Record<Verdict, string> = {
   met: "Met",
   partial: "Partly met",
@@ -17,29 +22,26 @@ const VERDICT_LABEL: Record<Verdict, string> = {
   uncertain: "Unclear",
 };
 
-type Role = "expert" | "successor";
-
 export type VerifyPanelProps = {
   versionId: string;
   versionNo: number;
-  expertId: string;
-  successorId: string;
-  initialRole?: Role;
+  // The view the page expects before any exercise exists. Once one exists, the backend's
+  // viewer_role for the signed-in account decides (expert, successor or read-only admin).
+  expectedRole: HandoffRole;
 };
 
-export default function VerifyPanel({ versionId, versionNo, expertId, successorId, initialRole = "expert" }: VerifyPanelProps) {
-  const [role, setRole] = useState<Role>(initialRole);
-  const viewer = role === "expert" ? expertId : successorId;
+export default function VerifyPanel({ versionId, versionNo, expectedRole }: VerifyPanelProps) {
   const [exercise, setExercise] = useState<Exercise | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<unknown>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const role: HandoffRole = exercise?.viewer_role ?? expectedRole;
 
   const load = useCallback(async () => {
-    const list = await api.listExercises(versionId, viewer);
+    const list = await api.listExercises(versionId);
     setExercise(list.length ? list[list.length - 1] : null);
     setLoaded(true);
-  }, [versionId, viewer]);
+  }, [versionId]);
 
   useEffect(() => {
     setLoaded(false);
@@ -75,22 +77,7 @@ export default function VerifyPanel({ versionId, versionNo, expertId, successorI
           <p className="eyebrow">Step 3 · Verify</p>
           <h2 id="verify-title">Exercise for knowledge v{versionNo}</h2>
         </div>
-        <fieldset className="role-switch">
-          <legend className="visually-hidden">View as</legend>
-          <label>
-            <input type="radio" name="verify-role" checked={role === "expert"} onChange={() => setRole("expert")} />
-            Expert ({expertId})
-          </label>
-          <label>
-            <input
-              type="radio"
-              name="verify-role"
-              checked={role === "successor"}
-              onChange={() => setRole("successor")}
-            />
-            Successor ({successorId})
-          </label>
-        </fieldset>
+        <span className="acting">{ROLE_VIEW[role]}</span>
       </header>
 
       <ErrorNotice error={error} onReload={reload} />
@@ -101,25 +88,19 @@ export default function VerifyPanel({ versionId, versionNo, expertId, successorI
       )}
       {!loaded && !error && <p role="status">Loading exercise…</p>}
 
-      {loaded && role === "expert" && (
+      {loaded && role !== "successor" && (
         <ExpertView
           exercise={exercise}
           busy={!!busy}
-          onGenerate={() => run("Generating exercise", () => api.createExercise(versionId, expertId))}
+          readOnly={role === "admin"}
+          onGenerate={() => run("Generating exercise", () => api.createExercise(versionId))}
           onSave={(scenario, criteria) =>
             run("Saving exercise", () =>
-              api.saveExerciseDraft(exercise!.id, {
-                scenario,
-                criteria,
-                expected_revision: exercise!.revision!,
-                actor_id: expertId,
-              }),
+              api.saveExerciseDraft(exercise!.id, { scenario, criteria, expected_revision: exercise!.revision! }),
             )
           }
           onApprove={() =>
-            run("Releasing exercise", () =>
-              api.approveExercise(exercise!.id, { expected_revision: exercise!.revision!, actor_id: expertId }),
-            )
+            run("Releasing exercise", () => api.approveExercise(exercise!.id, { expected_revision: exercise!.revision! }))
           }
         />
       )}
@@ -128,10 +109,8 @@ export default function VerifyPanel({ versionId, versionNo, expertId, successorI
         <SuccessorView
           exercise={exercise}
           busy={!!busy}
-          onSubmit={(answer) =>
-            run("Assessing your answer", () => api.submitAttempt(exercise!.id, { actor_id: successorId, answer }))
-          }
-          onReassess={(attemptId) => run("Re-assessing", () => api.reassess(attemptId, successorId))}
+          onSubmit={(answer) => run("Assessing your answer", () => api.submitAttempt(exercise!.id, { answer }))}
+          onReassess={(attemptId) => run("Re-assessing", () => api.reassess(attemptId))}
         />
       )}
     </section>
@@ -141,12 +120,14 @@ export default function VerifyPanel({ versionId, versionNo, expertId, successorI
 function ExpertView({
   exercise,
   busy,
+  readOnly,
   onGenerate,
   onSave,
   onApprove,
 }: {
   exercise: Exercise | null;
   busy: boolean;
+  readOnly: boolean;
   onGenerate: () => void;
   onSave: (scenario: string, criteria: Criterion[]) => void;
   onApprove: () => void;
@@ -165,13 +146,15 @@ function ExpertView({
     return (
       <div className="stack">
         <p className="notice">No exercise exists for this approved version yet.</p>
-        <button disabled={busy} onClick={onGenerate}>
-          Generate exercise
-        </button>
+        {!readOnly && (
+          <button disabled={busy} onClick={onGenerate}>
+            Generate exercise
+          </button>
+        )}
       </div>
     );
 
-  const editable = exercise.status === "draft";
+  const editable = exercise.status === "draft" && !readOnly;
   const patch = (i: number, p: Partial<Criterion>) => {
     setCriteria((cs) => cs.map((c, j) => (j === i ? { ...c, ...p } : c)));
     setDirty(true);

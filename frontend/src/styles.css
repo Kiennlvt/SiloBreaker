@@ -161,8 +161,6 @@ textarea { resize: vertical; }
 
 /* Verify */
 .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
-.role-switch { border: 1px solid var(--line); border-radius: 8px; padding: 4px 10px; display: flex; gap: 12px; font-size: 0.9rem; }
-.role-switch label { display: flex; gap: 4px; align-items: center; cursor: pointer; }
 .criterion { border-top: 1px dashed var(--line); padding: 8px 0; }
 .check { display: flex; gap: 6px; align-items: center; font-size: 0.85rem; color: var(--muted); }
 .attempts { display: grid; gap: 8px; }
@@ -178,4 +176,92 @@ textarea { resize: vertical; }
 .verdict-unmet .verdict-label { color: var(--danger); }
 .verdict-partial .verdict-label, .verdict-uncertain .verdict-label { color: var(--system); }
 .answer { white-space: pre-wrap; }
-.check input, .role-switch input { width: auto; margin: 0; padding: 0; }
+.check input { width: auto; margin: 0; padding: 0; }
+
+/* ---------- Website shell ---------- */
+/* Grid children default to min-width:auto, which lets a wide table stretch the page instead
+   of scrolling inside .table-wrap. */
+.stack > *, .layout > *, .side > *, main { min-width: 0; }
+.topbar { gap: 12px; flex-wrap: wrap; }
+.account { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.who { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.role-badge { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em; background: var(--source-bg); color: var(--source); border-radius: 999px; padding: 1px 9px; }
+.mainnav { display: flex; gap: 4px; flex-wrap: wrap; border-bottom: 1px solid var(--line); margin-bottom: 16px; }
+.mainnav a { color: var(--muted); text-decoration: none; padding: 8px 12px; border-bottom: 2px solid transparent; font-weight: 500; }
+.mainnav a:hover { color: var(--ink); }
+.mainnav a.active { color: var(--accent); border-bottom-color: var(--accent); }
+a { color: var(--accent); }
+a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.button.ghost { background: transparent; color: var(--ink); border-color: var(--line); }
+.narrow { max-width: 860px; }
+
+.login-page { min-height: 100vh; display: grid; place-items: center; padding: 16px; }
+.login { width: min(400px, 100%); display: grid; gap: 12px; }
+.login h2 { margin-top: 8px; }
+
+.status-page { max-width: 560px; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
+.tile { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; text-decoration: none; color: var(--ink); display: grid; gap: 2px; }
+.tile:hover { border-color: var(--accent); }
+.tile-num { font-size: 1.8rem; font-weight: 700; color: var(--accent); }
+.tile-label { color: var(--muted); font-size: 0.85rem; }
+.plain-list { list-style: none; padding: 0; margin: 8px 0 0; display: grid; gap: 4px; font-size: 0.9rem; }
+
+.filters { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; align-items: end; margin-bottom: 0; }
+.filters select, .form-grid select { width: 100%; min-width: 0; }
+.form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+/* position: relative keeps absolutely positioned (visually hidden) cells inside the scroller. */
+.table-wrap { width: 100%; overflow-x: auto; position: relative; }
+.data { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
+.data th, .data td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.data thead th { font-size: 0.72rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+.data tr.inactive td { color: var(--muted); }
+.nowrap { white-space: nowrap; }
+.break { word-break: break-word; max-width: 360px; }
+.pager { margin-top: 10px; justify-content: flex-end; }
+.card-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 10px; }
+.card-list > .panel { margin-bottom: 0; }
+.card-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.card-row.panel { padding: 14px 18px; border-bottom: 1px solid var(--line); }
+.card-list > .card-row:last-child { border-bottom: none; }
+.result-inline { margin: 2px 0 0; font-weight: 600; color: var(--muted); }
+.result-inline.result-demonstrated { color: var(--human); }
+.result-inline.result-not_yet { color: var(--danger); }
+.result-inline.result-partial, .result-inline.result-review_required { color: var(--system); }
+.knowledge h4 { margin: 4px 0; font-size: 0.9rem; }
+.knowledge ul, .knowledge ol { margin: 0; padding-left: 20px; }
+
+/* ---------- Score chart (numbers come from the API) ---------- */
+.score-chart { display: grid; gap: 10px; margin: 10px 0; }
+.total-label { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; margin: 0 0 4px; font-size: 0.9rem; }
+.bar { display: block; width: 100%; overflow: visible; }
+.total-bar { height: 16px; }
+.signal-bar { height: 10px; }
+.bar .track { fill: #ecebe5; }
+.bar .track-unknown { fill: none; stroke: var(--muted); stroke-width: 1.5; stroke-dasharray: 4 3; }
+.seg-A { fill: #23466e; }
+.seg-D { fill: #4f7cac; }
+.seg-O { fill: #8a5a00; }
+.seg-M { fill: #c48a2c; }
+.seg-B { fill: #1f6a45; }
+.cap-line { stroke: var(--danger); stroke-width: 2; stroke-dasharray: 4 3; }
+.cap-note { font-size: 0.85rem; color: var(--danger); margin-top: 4px; }
+.cap-note ul { margin: 2px 0 0; padding-left: 18px; color: var(--system); }
+.no-priority { display: grid; gap: 2px; background: var(--bg); border: 1px dashed var(--line); border-radius: 8px; padding: 8px 12px; }
+.signal-bars { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; }
+.signal { display: grid; gap: 2px; }
+.signal-head { display: flex; justify-content: space-between; gap: 8px; font-size: 0.85rem; }
+.signal.unknown .signal-head { color: var(--muted); }
+.basis { line-height: 1.3; }
+.calc { margin-top: 8px; }
+
+@media (max-width: 600px) {
+  .app { padding: 12px 12px 48px; }
+  .panel { padding: 14px; }
+  .finding-head { flex-direction: column-reverse; }
+  .priority { text-align: left; }
+  select { min-width: 0; width: 100%; }
+  .field.inline { display: grid; width: 100%; }
+  .mainnav a { padding: 6px 8px; }
+  .side { overflow: visible; }
+}
