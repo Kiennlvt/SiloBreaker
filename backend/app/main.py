@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.routes import router
 from app.api.verify_routes import router as verify_router
+from app.auth.routes import router as auth_router
 from app.config import get_settings
 from app.errors import AppError, app_error_handler
 
@@ -26,6 +27,7 @@ app.add_middleware(
 )
 app.include_router(router)
 app.include_router(verify_router)
+app.include_router(auth_router)
 
 
 @app.middleware("http")

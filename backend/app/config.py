@@ -25,6 +25,11 @@ class Settings(BaseSettings):
     prompt_version: str = "detect/1"
     schema_version: str = "analysis/1"
     cors_origins: list[str] = ["http://localhost:5173"]
+    # Web accounts: server-side sessions behind an HttpOnly cookie.
+    session_cookie_name: str = "sb_session"
+    session_ttl_hours: int = 8
+    # Set true when served over HTTPS; the local dev server is plain HTTP.
+    session_cookie_secure: bool = False
 
 
 @lru_cache

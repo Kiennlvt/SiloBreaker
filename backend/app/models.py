@@ -277,3 +277,35 @@ class AuditEvent(Base):
     target_revision: Mapped[int | None] = mapped_column(Integer)
     metadata_: Mapped[dict] = mapped_column("metadata", JSONB, nullable=False, default=dict)
     created_at: Mapped[datetime] = _now()
+
+
+class AppUser(Base):
+    """Login identity. Survives demo reset. Only an argon2 hash of the password is stored."""
+
+    __tablename__ = "app_user"
+    __table_args__ = (CheckConstraint("role in ('admin','member')", name="ck_app_user_role"),)
+    id: Mapped[uuid.UUID] = _id()
+    username: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
+    display_name: Mapped[str | None] = mapped_column(Text)
+    role: Mapped[str] = mapped_column(Text, nullable=False)
+    # Evidence actor ID this account speaks for (e.g. "alice"); null for admins.
+    person_id: Mapped[str | None] = mapped_column(Text)
+    password_hash: Mapped[str] = mapped_column(Text, nullable=False)
+    is_active: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default="true"
+    )
+    created_at: Mapped[datetime] = _now()
+    last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class UserSession(Base):
+    """Server-side session. Stores a SHA-256 hash of the cookie token, never the token."""
+
+    __tablename__ = "user_session"
+    __table_args__ = (Index("idx_user_session_user", "user_id"),)
+    id: Mapped[uuid.UUID] = _id()
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("app_user.id"), nullable=False)
+    token_hash: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
+    created_at: Mapped[datetime] = _now()
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

@@ -330,6 +330,7 @@ def reset_demo(session: Session = Depends(tx)) -> dict:
     """Clears all workflow and evidence state, then re-imports the fixture bundle (FR-24).
 
     TRUNCATE is used because the immutability triggers block row-level DELETE.
+    app_user and user_session are deliberately absent: accounts and sign-ins survive a reset.
     """
     session.execute(
         text(
