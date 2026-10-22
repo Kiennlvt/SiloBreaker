@@ -31,15 +31,73 @@ def migrated_db():
     cfg = Config(str(BACKEND / "alembic.ini"))
     cfg.set_main_option("script_location", str(BACKEND / "migrations"))
     command.upgrade(cfg, "head")
+    from app.db import get_session
+    from app.seed_users import seed_users
+
+    for session in get_session():
+        seed_users(session)  # hashed once per run; each test restores the rows below
+        session.commit()
     yield
+
+
+def _restore_demo_users() -> None:
+    """Drop accounts and sessions a previous test created and undo edits to the demo users,
+    without re-hashing their passwords."""
+    from app.seed_users import DEMO_USERS
+
+    engine = create_engine(TEST_DB)
+    with engine.begin() as c:
+        c.execute(text("truncate user_session"))
+        names = [u["username"] for u in DEMO_USERS]
+        c.execute(text("delete from app_user where username <> all(:n)"), {"n": names})
+        for u in DEMO_USERS:
+            c.execute(
+                text(
+                    "update app_user set role=:role, person_id=:person_id,"
+                    " display_name=:display_name, is_active=true where username=:username"
+                ),
+                {k: u[k] for k in ("username", "role", "person_id", "display_name")},
+            )
+    engine.dispose()
+
+
+PASSWORDS = {"admin": "Admin@123", "alice": "Alice@123", "bob": "Bob@123"}
+
+
+def login_as(client, username: str, password: str | None = None):
+    """Switches the client to `username`, reusing that user's session within the test."""
+    tokens = client.__dict__.setdefault("_tokens", {})
+    client.cookies.clear()
+    if username not in tokens:
+        r = client.post(
+            "/api/auth/login",
+            json={"username": username, "password": password or PASSWORDS[username]},
+        )
+        assert r.status_code == 200, r.text
+        tokens[username] = client.cookies.get("sb_session")
+        client.cookies.clear()
+    client.cookies.set("sb_session", tokens[username])
+    return client
+
+
+def create_member(client, username: str, password: str = "Member@123", **extra) -> dict:
+    """Creates a member account as admin and leaves the client signed in as admin."""
+    r = login_as(client, "admin").post(
+        "/api/admin/users",
+        json={"username": username, "role": "member", "password": password, **extra},
+    )
+    assert r.status_code == 201, r.text
+    PASSWORDS[username] = password
+    return r.json()
 
 
 @pytest.fixture
 def client():
     from app.main import app
 
-    with TestClient(app) as c:
-        r = c.post("/api/demo/reset")
+    _restore_demo_users()
+    with TestClient(app, headers={"X-Requested-With": "silobreaker"}) as c:
+        r = login_as(c, "admin").post("/api/demo/reset")
         assert r.status_code == 200, r.text
         c.bundle = r.json()
         yield c
@@ -52,7 +110,8 @@ def oracle():
 
 
 def make_handoff(client, expert="alice", successor="bob"):
-    r = client.post(
+    """Created by the admin; leaves the client signed in as admin."""
+    r = login_as(client, "admin").post(
         "/api/handoffs",
         json={"bundle_id": client.bundle["id"], "expert_id": expert, "successor_id": successor},
     )
@@ -60,9 +119,10 @@ def make_handoff(client, expert="alice", successor="bob"):
     return r.json()
 
 
-def analyze(client, handoff, selected=None, key=None):
+def analyze(client, handoff, selected=None, key=None, as_user=None):
+    """Run by the handoff's expert (default); leaves the client signed in as that user."""
     headers = {"Idempotency-Key": key} if key else {}
-    r = client.post(
+    r = login_as(client, as_user or handoff["expert_id"]).post(
         f"/api/handoffs/{handoff['id']}/analyses",
         json={"selected_engineer_id": selected},
         headers=headers,

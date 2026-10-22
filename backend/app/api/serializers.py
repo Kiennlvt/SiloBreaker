@@ -11,6 +11,10 @@ from app.models import (
     KnowledgeVersion,
     Operation,
 )
+from app.scoring.rules import CAP, WEIGHTS
+
+# Viewers who may see the private rubric and assessor details.
+FULL_VIEW = ("expert", "admin")
 
 
 def bundle_out(
@@ -42,6 +46,13 @@ def handoff_out(h: Handoff) -> dict:
     }
 
 
+def contributions(signals: dict) -> dict:
+    """Per-signal points (value x weight) for display; unknown signals stay null."""
+    return {
+        k: None if signals.get(k) is None else w * float(signals[k]) for k, w in WEIGHTS.items()
+    }
+
+
 def finding_out(f: Finding, prior: dict | None = None) -> dict:
     sv = f.signal_values
     return {
@@ -54,6 +65,9 @@ def finding_out(f: Finding, prior: dict | None = None) -> dict:
         "signals": sv["signals"],
         "counts": sv["counts"],
         "raw_score": sv["raw"],
+        "weights": dict(WEIGHTS),
+        "contributions": contributions(sv["signals"]),
+        "cap": CAP,
         "reasons": sv["reasons"],
         "missing_facets": sv["missing_facets"],
         "top_candidate": sv.get("top_candidate", False),
@@ -191,11 +205,11 @@ def attempt_out(a: Attempt, exercise: Exercise, version: KnowledgeVersion, viewe
         "assessment_status": a.assessment_status,
         "assessment_error": a.assessment_error,
         "aggregate_result": a.aggregate_result,
-        "results": _results(a, exercise.rubric, viewer == "expert"),
+        "results": _results(a, exercise.rubric, viewer in FULL_VIEW),
         "created_at": a.created_at,
         "assessed_at": a.assessed_at,
     }
-    if viewer == "expert":
+    if viewer in FULL_VIEW:
         out["assessor_id"] = a.assessor_id
     return out
 
@@ -213,7 +227,7 @@ def exercise_out(
         "viewer_role": viewer,
         "attempts": [attempt_out(a, e, version, viewer) for a in attempts],
     }
-    if viewer == "expert":
+    if viewer in FULL_VIEW:
         out |= {
             "revision": e.revision,
             "approved_by": e.approved_by,

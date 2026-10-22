@@ -14,12 +14,7 @@ def _db():
 
 @pytest.fixture
 def users(client):
-    s = _db()
-    try:
-        seed_users(s)
-        s.commit()
-    finally:
-        s.close()
+    """`client` has restored the demo accounts; start signed out."""
     client.cookies.clear()
     return client
 
@@ -133,6 +128,20 @@ def test_seed_is_idempotent(users):
 
 def test_demo_reset_keeps_users_and_sessions(users):
     _login(users)
-    assert users.post("/api/demo/reset").status_code == 200
-    assert users.get("/api/auth/me").json()["user"]["username"] == "alice"
+    alice_token = users.cookies.get("sb_session")
+    users.cookies.clear()
     assert _login(users, "admin", "Admin@123").status_code == 200
+    assert users.post("/api/demo/reset").status_code == 200
+    users.cookies.clear()
+    users.cookies.set("sb_session", alice_token)
+    assert users.get("/api/auth/me").json()["user"]["username"] == "alice"
+    assert _login(users, "bob", "Bob@123").status_code == 200
+
+
+def test_write_without_csrf_header_is_403(users):
+    r = users.post(
+        "/api/auth/login",
+        json={"username": "alice", "password": "Alice@123"},
+        headers={"X-Requested-With": ""},
+    )
+    assert r.status_code == 403 and r.json()["error"]["code"] == "csrf_header_missing"

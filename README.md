@@ -18,7 +18,7 @@ Human approval is the boundary between system interpretation and approved knowle
 | Capture: review, revisioned drafts, explicit approval, immutable versions, OKF export with derived lifecycle (active/superseded/retired) | Done |
 | Verify: exercise generation, expert rubric review/release, successor attempts, criterion-level assessment, deterministic aggregate, retry/reassess | Done |
 | Model-backed extractor/generator/assessor (`SB_AI_PROVIDER=openai`) | Implemented and tested with a fake client; not exercised against a live model |
-| Authentication | Not implemented (see below) |
+| Authentication | Backend done: accounts, sessions, server-side authorization. Frontend not migrated yet (see below) |
 
 ## Quick start / Chạy nhanh
 
@@ -76,13 +76,24 @@ counting, actor change, prompt injection in evidence, citation resolution and re
 idempotency, stale revisions, immutability enforced by database triggers, and OKF export. It also
 reproduces the exhaustive scoring analysis (243 configurations) reported in the project report.
 
-## Security status: no authentication yet
+## Security status: accounts and server-side authorization
 
-There is **no authentication or authorization layer**. Every mutation names its actor in the
-request body (`actor_id`, `author_id`, `approver_id`) and reads pass `viewer_id`; the backend
-checks that this person has the right role in the handoff (expert, successor), but it trusts
-the identifier as given. That is only acceptable for this synthetic-data demo. A real
-deployment must derive the actor from an authenticated session instead of the request body.
+Every API route except `/api/health` and `/api/auth/login` requires a signed-in session
+(`sb_session`, HttpOnly, SameSite=Lax, 8 hours, stored server-side as a token hash). The acting
+person is always the account's `person_id`; request bodies and query strings no longer carry
+`actor_id`, `author_id`, `approver_id` or `viewer_id`. Write requests must send
+`X-Requested-With: silobreaker`.
+
+- **admin**: imports bundles, resets the demo, creates handoffs, runs analyses, manages users,
+  reads the audit log and everything else; never reviews, captures, publishes, authors
+  exercises or answers them.
+- **handoff expert**: runs analyses, Capture and Verify authoring.
+- **handoff successor**: released exercises (no rubric), own attempts and results.
+- **everyone signed in**: approved knowledge and OKF (`/api/library`).
+
+Demo accounts: `cd backend && python -m app.seed_users` creates `admin`, `alice`, `bob`
+(passwords in `app/seed_users.py`; demo data only). The React frontend and `e2e/demo_flow.py`
+still use the old unauthenticated API and will be migrated in the next phase.
 
 ## Repository layout
 

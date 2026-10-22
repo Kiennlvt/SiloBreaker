@@ -18,7 +18,7 @@ from app.verify.contract import (
 )
 from app.verify.offline import OfflineAssessor
 from app.verify.rules import aggregate
-from tests.conftest import analyze, by_area, make_handoff
+from tests.conftest import analyze, by_area, create_member, login_as, make_handoff
 
 EXPERT, SUCCESSOR = "alice", "bob"
 
@@ -28,42 +28,44 @@ EXPERT, SUCCESSOR = "alice", "bob"
 
 def publish_settlement(client, oracle):
     f = by_area(analyze(client, make_handoff(client)))["settlement"]
-    f = client.post(
-        f"/api/findings/{f['id']}/review",
-        json={"action": "confirm", "actor_id": EXPERT, "expected_revision": f["revision"]},
-    ).json()
+    f = (
+        login_as(client, EXPERT)
+        .post(
+            f"/api/findings/{f['id']}/review",
+            json={"action": "confirm", "expected_revision": f["revision"]},
+        )
+        .json()
+    )
     d = client.put(
         f"/api/findings/{f['id']}/draft",
-        json={"content": oracle["expert_capture"]["content"], "author_id": EXPERT},
+        json={"content": oracle["expert_capture"]["content"]},
     ).json()
     v = client.post(
         f"/api/findings/{f['id']}/publish",
         json={
             "expected_finding_revision": f["revision"],
             "draft_revision": d["revision"],
-            "approver_id": EXPERT,
         },
     ).json()
     return f, d, v
 
 
 def generate(client, version_id, actor=EXPERT):
-    return client.post(f"/api/knowledge/{version_id}/exercises", json={"actor_id": actor})
+    return login_as(client, actor).post(f"/api/knowledge/{version_id}/exercises")
 
 
 def release(client, ex):
-    r = client.post(
-        f"/api/exercises/{ex['id']}/approve",
-        json={"expected_revision": ex["revision"], "actor_id": EXPERT},
+    r = login_as(client, EXPERT).post(
+        f"/api/exercises/{ex['id']}/approve", json={"expected_revision": ex["revision"]}
     )
     assert r.status_code == 200, r.text
     return r.json()
 
 
 def submit(client, ex_id, answer, key=None, actor=SUCCESSOR):
-    return client.post(
+    return login_as(client, actor).post(
         f"/api/exercises/{ex_id}/attempts",
-        json={"actor_id": actor, "answer": answer},
+        json={"answer": answer},
         headers={"Idempotency-Key": key or str(uuid.uuid4())},
     )
 
@@ -96,9 +98,8 @@ def test_only_expert_generates_edits_and_releases(client, oracle):
     _, _, v = publish_settlement(client, oracle)
     assert generate(client, v["id"], actor=SUCCESSOR).status_code == 403
     ex = generate(client, v["id"]).json()
-    r = client.post(
-        f"/api/exercises/{ex['id']}/approve",
-        json={"expected_revision": ex["revision"], "actor_id": SUCCESSOR},
+    r = login_as(client, SUCCESSOR).post(
+        f"/api/exercises/{ex['id']}/approve", json={"expected_revision": ex["revision"]}
     )
     assert r.status_code == 403
 
@@ -110,7 +111,6 @@ def test_expert_edit_is_validated_and_revision_checked(client, oracle):
         "scenario": ex["scenario"] + " Assume it is a weekend.",
         "criteria": ex["criteria"],
         "expected_revision": ex["revision"],
-        "actor_id": EXPERT,
     }
     edited = client.put(f"/api/exercises/{ex['id']}/draft", json=body)
     assert edited.status_code == 200 and edited.json()["revision"] == ex["revision"] + 1
@@ -127,7 +127,7 @@ def test_expert_edit_is_validated_and_revision_checked(client, oracle):
 def test_successor_cannot_see_or_answer_unreleased_exercise(client, oracle):
     _, _, v = publish_settlement(client, oracle)
     ex = generate(client, v["id"]).json()
-    r = client.get(f"/api/exercises/{ex['id']}", params={"viewer_id": SUCCESSOR})
+    r = login_as(client, SUCCESSOR).get(f"/api/exercises/{ex['id']}")
     assert r.status_code == 403
     r = submit(client, ex["id"], "anything")
     assert r.status_code == 409 and r.json()["error"]["code"] == "exercise_not_ready"
@@ -135,12 +135,11 @@ def test_successor_cannot_see_or_answer_unreleased_exercise(client, oracle):
 
 def test_exercise_from_obsolete_or_rejected_finding_conflicts(client, oracle):
     f, _, v = publish_settlement(client, oracle)
-    r = client.post(
+    r = login_as(client, EXPERT).post(
         f"/api/findings/{f['id']}/review",
         json={
             "action": "obsolete",
             "reason": "Provider replaced",
-            "actor_id": EXPERT,
             "expected_revision": f["revision"],
         },
     )
@@ -170,7 +169,7 @@ def test_unsafe_answer_is_not_yet(client, ready, oracle):
     assert r.status_code == 201, r.text
     a = r.json()
     assert a["assessment_status"] == "succeeded" and a["aggregate_result"] == "not_yet"
-    expert = client.get(f"/api/attempts/{a['id']}", params={"viewer_id": EXPERT}).json()
+    expert = login_as(client, EXPERT).get(f"/api/attempts/{a['id']}").json()
     unmet_critical = [x for x in expert["results"] if x["critical"] and x["verdict"] == "unmet"]
     assert unmet_critical
 
@@ -194,7 +193,7 @@ def test_retry_creates_new_attempt_and_old_stays_immutable(client, ready, oracle
     first = submit(client, ex_id, oracle["successor_answers"]["unsafe"]).json()
     second = submit(client, ex_id, oracle["successor_answers"]["correct_paraphrase"]).json()
     assert first["id"] != second["id"]
-    again = client.get(f"/api/attempts/{first['id']}", params={"viewer_id": SUCCESSOR}).json()
+    again = login_as(client, SUCCESSOR).get(f"/api/attempts/{first['id']}").json()
     assert again["answer"] == oracle["successor_answers"]["unsafe"]
     assert again["aggregate_result"] == "not_yet"
     session = next(get_session())
@@ -222,9 +221,7 @@ def test_attempt_idempotency(client, ready, oracle):
     assert a["id"] == b["id"]
     r = submit(client, ex_id, "a different answer", key="att-1")
     assert r.status_code == 409 and r.json()["error"]["code"] == "idempotency_key_reused"
-    r = client.post(
-        f"/api/exercises/{ex_id}/attempts", json={"actor_id": SUCCESSOR, "answer": answer}
-    )
+    r = client.post(f"/api/exercises/{ex_id}/attempts", json={"answer": answer})
     assert r.status_code == 422
 
 
@@ -236,24 +233,27 @@ def test_only_successor_submits(client, ready, oracle):
 def test_new_version_keeps_old_attempts_on_old_version(client, ready, oracle):
     a = submit(client, ready["exercise"]["id"], oracle["successor_answers"]["unsafe"]).json()
     f, d = ready["finding"], ready["draft"]
-    d2 = client.put(
-        f"/api/findings/{f['id']}/draft",
-        json={
-            "content": oracle["expert_capture"]["content"] | {"limitations": ["Only for AcmePay"]},
-            "expected_revision": d["revision"],
-            "author_id": EXPERT,
-        },
-    ).json()
+    d2 = (
+        login_as(client, EXPERT)
+        .put(
+            f"/api/findings/{f['id']}/draft",
+            json={
+                "content": oracle["expert_capture"]["content"]
+                | {"limitations": ["Only for AcmePay"]},
+                "expected_revision": d["revision"],
+            },
+        )
+        .json()
+    )
     v2 = client.post(
         f"/api/findings/{f['id']}/publish",
         json={
             "expected_finding_revision": f["revision"],
             "draft_revision": d2["revision"],
-            "approver_id": EXPERT,
         },
     ).json()
     assert v2["version_no"] == 2
-    old = client.get(f"/api/attempts/{a['id']}", params={"viewer_id": SUCCESSOR}).json()
+    old = login_as(client, SUCCESSOR).get(f"/api/attempts/{a['id']}").json()
     assert old["knowledge_version_id"] == ready["version"]["id"]
     assert old["knowledge_version_no"] == 1
     # The superseded version no longer grounds new exercises; the new one does.
@@ -274,12 +274,10 @@ def test_successor_never_sees_rubric_before_assessment(client, ready, oracle):
         for t in criteria_text:
             assert t not in payload
 
-    view = client.get(f"/api/exercises/{ex['id']}", params={"viewer_id": SUCCESSOR})
+    view = login_as(client, SUCCESSOR).get(f"/api/exercises/{ex['id']}")
     assert view.status_code == 200 and view.json()["scenario"]
     assert_private(view.text)
-    listing = client.get(
-        f"/api/knowledge/{ready['version']['id']}/exercises", params={"viewer_id": SUCCESSOR}
-    )
+    listing = login_as(client, SUCCESSOR).get(f"/api/knowledge/{ready['version']['id']}/exercises")
     assert_private(listing.text)
 
     # A failed assessment is "before assessment" too: still nothing about the rubric.
@@ -293,7 +291,7 @@ def test_successor_never_sees_rubric_before_assessment(client, ready, oracle):
     finally:
         V.get_assessor = original
     attempt_id = r.json()["error"]["attempt_id"]
-    pending = client.get(f"/api/attempts/{attempt_id}", params={"viewer_id": SUCCESSOR})
+    pending = login_as(client, SUCCESSOR).get(f"/api/attempts/{attempt_id}")
     assert_private(pending.text)
 
     # After assessment only per-criterion results are returned; no critical flags.
@@ -303,7 +301,8 @@ def test_successor_never_sees_rubric_before_assessment(client, ready, oracle):
 
 
 def test_outsider_sees_nothing(client, ready):
-    r = client.get(f"/api/exercises/{ready['exercise']['id']}", params={"viewer_id": "carol"})
+    create_member(client, "carol")
+    r = login_as(client, "carol").get(f"/api/exercises/{ready['exercise']['id']}")
     assert r.status_code == 403
 
 
@@ -325,7 +324,7 @@ def test_provider_error_is_502_and_never_not_yet(client, ready, oracle, monkeypa
     r = submit(client, ready["exercise"]["id"], oracle["successor_answers"]["unsafe"])
     assert r.status_code == 502 and r.json()["error"]["code"] == "provider_error"
     attempt_id = r.json()["error"]["attempt_id"]
-    a = client.get(f"/api/attempts/{attempt_id}", params={"viewer_id": SUCCESSOR}).json()
+    a = login_as(client, SUCCESSOR).get(f"/api/attempts/{attempt_id}").json()
     assert a["answer"] == oracle["successor_answers"]["unsafe"]  # stored before assessment
     assert a["assessment_status"] == "failed" and a["aggregate_result"] is None
     assert a["results"] is None
@@ -333,11 +332,11 @@ def test_provider_error_is_502_and_never_not_yet(client, ready, oracle, monkeypa
     assert op["state"] == "failed" and op["error_code"] == "provider_error"
 
     monkeypatch.setattr(V, "get_assessor", lambda: OfflineAssessor())
-    re = client.post(f"/api/attempts/{attempt_id}/reassess", json={"actor_id": SUCCESSOR})
+    re = login_as(client, SUCCESSOR).post(f"/api/attempts/{attempt_id}/reassess")
     assert re.status_code == 200, re.text
     assert re.json()["assessment_status"] == "succeeded"
     assert re.json()["aggregate_result"] == "not_yet"
-    again = client.post(f"/api/attempts/{attempt_id}/reassess", json={"actor_id": SUCCESSOR})
+    again = client.post(f"/api/attempts/{attempt_id}/reassess")
     assert again.status_code == 409
 
 
