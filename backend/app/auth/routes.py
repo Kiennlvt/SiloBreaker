@@ -1,10 +1,11 @@
-from fastapi import APIRouter, Depends, Request, Response
+from fastapi import APIRouter, Depends, Response
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from app.api.routes import tx
 from app.auth import service
+from app.auth.deps import current_user, session_token
 from app.config import get_settings
+from app.db import tx
 from app.errors import AppError
 from app.models import AppUser
 
@@ -16,7 +17,7 @@ class LoginIn(BaseModel):
     password: str = Field(min_length=1, max_length=1024)
 
 
-def _user(user: AppUser) -> dict:
+def user_out(user: AppUser) -> dict:
     return {
         "id": str(user.id),
         "username": user.username,
@@ -24,17 +25,6 @@ def _user(user: AppUser) -> dict:
         "role": user.role,
         "person_id": user.person_id,
     }
-
-
-def _token(request: Request) -> str | None:
-    return request.cookies.get(get_settings().session_cookie_name)
-
-
-def current_user(token: str | None = Depends(_token), session: Session = Depends(tx)) -> AppUser:
-    found = service.resolve_session(session, token)
-    if found is None:
-        raise AppError(401, "not_authenticated", "Sign in required")
-    return found[1]
 
 
 @router.post("/login")
@@ -55,11 +45,11 @@ def login(body: LoginIn, response: Response, session: Session = Depends(tx)) -> 
         secure=settings.session_cookie_secure,
         path="/",
     )
-    return {"user": _user(user), "expires_at": row.expires_at.isoformat()}
+    return {"user": user_out(user), "expires_at": row.expires_at.isoformat()}
 
 
 @router.post("/logout", status_code=204)
-def logout(token: str | None = Depends(_token), session: Session = Depends(tx)) -> Response:
+def logout(token: str | None = Depends(session_token), session: Session = Depends(tx)) -> Response:
     """Revokes the current session, if any. Always clears the cookie."""
     found = service.resolve_session(session, token)
     if found is not None:
@@ -71,4 +61,4 @@ def logout(token: str | None = Depends(_token), session: Session = Depends(tx)) 
 
 @router.get("/me")
 def me(user: AppUser = Depends(current_user)) -> dict:
-    return {"user": _user(user)}
+    return {"user": user_out(user)}

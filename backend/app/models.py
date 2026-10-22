@@ -15,6 +15,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     func,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -283,7 +284,15 @@ class AppUser(Base):
     """Login identity. Survives demo reset. Only an argon2 hash of the password is stored."""
 
     __tablename__ = "app_user"
-    __table_args__ = (CheckConstraint("role in ('admin','member')", name="ck_app_user_role"),)
+    __table_args__ = (
+        CheckConstraint("role in ('admin','member')", name="ck_app_user_role"),
+        Index(
+            "uq_app_user_person_id",
+            "person_id",
+            unique=True,
+            postgresql_where=text("person_id is not null"),
+        ),
+    )
     id: Mapped[uuid.UUID] = _id()
     username: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
     display_name: Mapped[str | None] = mapped_column(Text)

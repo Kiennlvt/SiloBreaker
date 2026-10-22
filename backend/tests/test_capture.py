@@ -5,7 +5,7 @@ from sqlalchemy import text
 
 from app.db import get_session
 from app.knowledge.okf import parse_okf
-from tests.conftest import analyze, by_area, make_handoff
+from tests.conftest import analyze, by_area, login_as, make_handoff
 
 
 @pytest.fixture
@@ -15,12 +15,11 @@ def settlement(client):
 
 
 def review(client, f, action, reason="", actor="alice", revision=None):
-    return client.post(
+    return login_as(client, actor).post(
         f"/api/findings/{f['id']}/review",
         json={
             "action": action,
             "reason": reason,
-            "actor_id": actor,
             "expected_revision": f["revision"] if revision is None else revision,
         },
     )
@@ -28,9 +27,9 @@ def review(client, f, action, reason="", actor="alice", revision=None):
 
 def capture(client, f, oracle, revision=None):
     content = oracle["expert_capture"]["content"]
-    r = client.put(
+    r = login_as(client, "alice").put(
         f"/api/findings/{f['id']}/draft",
-        json={"content": content, "expected_revision": revision, "author_id": "alice"},
+        json={"content": content, "expected_revision": revision},
     )
     assert r.status_code == 200, r.text
     return r.json()
@@ -45,7 +44,6 @@ def test_full_capture_and_okf_export(client, settlement, oracle):
         json={
             "expected_finding_revision": f["revision"],
             "draft_revision": draft["revision"],
-            "approver_id": "alice",
         },
     )
     assert r.status_code == 201, r.text
@@ -77,7 +75,7 @@ def test_rejected_finding_cannot_publish(client, settlement, oracle):
     f = review(client, settlement, "reject", "Not a real gap").json()
     r = client.put(
         f"/api/findings/{f['id']}/draft",
-        json={"content": oracle["expert_capture"]["content"], "author_id": "alice"},
+        json={"content": oracle["expert_capture"]["content"]},
     )
     assert r.status_code == 409
     r = client.post(
@@ -85,7 +83,6 @@ def test_rejected_finding_cannot_publish(client, settlement, oracle):
         json={
             "expected_finding_revision": f["revision"],
             "draft_revision": 1,
-            "approver_id": "alice",
         },
     )
     assert r.status_code == 409
@@ -105,7 +102,6 @@ def test_stale_draft_approval_conflicts(client, settlement, oracle):
         json={
             "expected_finding_revision": f["revision"],
             "draft_revision": 1,
-            "approver_id": "alice",
         },
     )
     assert r.status_code == 409 and r.json()["error"]["code"] == "stale_revision"
@@ -114,7 +110,7 @@ def test_stale_draft_approval_conflicts(client, settlement, oracle):
 def test_new_version_supersedes_and_old_stays_readable(client, settlement, oracle):
     f = review(client, settlement, "confirm").json()
     d1 = capture(client, f, oracle)
-    body = {"expected_finding_revision": f["revision"], "approver_id": "alice"}
+    body = {"expected_finding_revision": f["revision"]}
     v1 = client.post(f"/api/findings/{f['id']}/publish", json=body | {"draft_revision": 1}).json()
     dup = client.post(f"/api/findings/{f['id']}/publish", json=body | {"draft_revision": 1})
     assert dup.status_code == 409  # the same draft revision is never published twice
@@ -134,7 +130,6 @@ def test_approved_version_is_immutable_in_database(client, settlement, oracle):
         json={
             "expected_finding_revision": f["revision"],
             "draft_revision": 1,
-            "approver_id": "alice",
         },
     ).json()
     session = next(get_session())
@@ -152,7 +147,7 @@ def test_approved_version_is_immutable_in_database(client, settlement, oracle):
 def test_publish_idempotency(client, settlement, oracle):
     f = review(client, settlement, "confirm").json()
     capture(client, f, oracle)
-    body = {"expected_finding_revision": f["revision"], "draft_revision": 1, "approver_id": "alice"}
+    body = {"expected_finding_revision": f["revision"], "draft_revision": 1}
     h = {"Idempotency-Key": "pub-1"}
     a = client.post(f"/api/findings/{f['id']}/publish", json=body, headers=h).json()
     b = client.post(f"/api/findings/{f['id']}/publish", json=body, headers=h).json()
@@ -171,12 +166,11 @@ def test_structurer_uses_only_expert_words(client, settlement, oracle):
 
 
 def publish_rev(client, f, draft_revision):
-    r = client.post(
+    r = login_as(client, "alice").post(
         f"/api/findings/{f['id']}/publish",
         json={
             "expected_finding_revision": f["revision"],
             "draft_revision": draft_revision,
-            "approver_id": "alice",
         },
     )
     assert r.status_code == 201, r.text

@@ -96,3 +96,14 @@ def end_session(session: Session, row: UserSession, user: AppUser) -> None:
         user.id,
         metadata={"session_id": str(row.id)},
     )
+
+
+def revoke_all_sessions(session: Session, user_id: uuid.UUID) -> int:
+    """Revokes every live session of a user; returns how many were revoked."""
+    now = datetime.now(UTC)
+    rows = session.scalars(
+        select(UserSession).where(UserSession.user_id == user_id, UserSession.revoked_at.is_(None))
+    ).all()
+    for row in rows:
+        row.revoked_at = now
+    return len(rows)

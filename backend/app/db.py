@@ -43,3 +43,14 @@ def get_session() -> Iterator[Session]:
         yield session
     finally:
         session.close()
+
+
+def tx() -> Iterator[Session]:
+    """One transaction per request: commit on success, roll back on any error."""
+    for session in get_session():
+        try:
+            yield session
+            session.commit()
+        except Exception:
+            session.rollback()
+            raise
