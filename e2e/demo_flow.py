@@ -1,11 +1,14 @@
-"""Browser-level check of the demo path on the multi-page, signed-in website (docs/09):
+"""Browser-level check of the demo path on the multi-page, signed-in website (docs/DEMO.md):
 
-admin: sign in -> Reset demo -> handoff Alice -> Bob -> run analysis -> log out
-alice: sign in -> Settlement 88 -> Confirm -> answer -> Save draft -> Approve -> OKF ->
-       generate + release exercise -> log out
-bob:   sign in -> /learn -> unsafe answer (Not yet demonstrated) -> Try again with a correct
-       paraphrase (Demonstrated) -> /admin shows 403 -> log out
-admin: sign in -> /admin/audit shows actions by all three
+a. admin: sign in -> Reset demo -> handoff Alice -> Bob -> run analysis -> log out
+b. alice: Detect: Settlement 88 with score chart, Webhooks 60 with cap line, Show calculation
+          (raw 87.5) -> Confirm -> answer -> Structure -> Save draft -> Approve -> OKF ->
+          generate + release exercise -> log out
+c. bob:   /learn without rubric -> unsafe answer (Not yet demonstrated) -> Try again with a
+          correct paraphrase (Demonstrated, Earlier attempts (1)) -> /admin shows 403 ->
+          log out -> browser Back stays signed out
+d. admin: /admin/audit shows actions by all three, filterable per person
+e. a wrong password and an unknown user get the same generic message
 
 Run with the API on :8000 (demo accounts seeded: python -m app.seed_users) and the Vite dev
 server on :5173:
@@ -88,15 +91,25 @@ def expert_capture(page: Page, run: int) -> None:
     login(page, "alice")
     at(page, "/expert")
     page.get_by_role("link", name="Open Detect").click()
-    first = page.locator(".detect .finding").first
-    expect(first.locator("h3")).to_have_text("Settlement recovery")
-    expect(first.locator(".priority-num")).to_have_text("88")
+    at(page, "/expert/handoffs/[^/]+/detect")
+    first = page.get_by_role("article", name="Settlement recovery")
+    expect(first.get_by_label("Review priority", exact=True)).to_have_text(re.compile(r"^88"))
     expect(
         first.get_by_role("img", name="Raw score 87.5 of 100, review priority 88")
     ).to_be_visible()
-    expect(first.locator("svg.signal-bar")).to_have_count(5)
-    first.get_by_role("button", name="Inspect").click()
-    expect(page.locator(".evidence mark").first).to_be_visible()
+    expect(first.get_by_role("img", name=re.compile(r"points$"))).to_have_count(5)
+
+    webhooks = page.get_by_role("article", name=re.compile("^Webhooks"))
+    expect(webhooks.get_by_label("Review priority", exact=True)).to_have_text(re.compile(r"^60"))
+    expect(webhooks.get_by_test_id("cap-line")).to_have_count(1)
+    expect(webhooks.get_by_text("Capped at 60")).to_be_visible()
+
+    first.get_by_role("button", name="Show calculation").click()
+    calc = first.get_by_role("table")
+    expect(calc.get_by_role("row", name=re.compile("^Raw score"))).to_contain_text("87.5")
+    first.get_by_role("button", name="Hide calculation").click()
+    first.get_by_role("button", name=re.compile("^Inspect")).click()
+    expect(page.get_by_role("dialog", name="Source evidence").locator("mark").first).to_be_visible()
     page.get_by_role("button", name="Close evidence").click()
     shot(page, run, "2-expert-detect")
 
@@ -153,7 +166,15 @@ def successor_answers(page: Page, run: int) -> None:
     page.goto(f"{BASE}/admin")
     at(page, "/403")
     expect(page.get_by_role("heading", name="You do not have access to this page")).to_be_visible()
+    shot(page, run, "7-forbidden")
     logout(page)
+
+    # Back must not return to a signed-in page: the session is revoked on the server.
+    page.go_back()
+    at(page, "/login")
+    expect(page.get_by_role("button", name="Sign in")).to_be_visible()
+    expect(page.get_by_role("button", name="Log out")).to_have_count(0)
+    assert page.request.get(f"{BASE}/api/auth/me").status == 401, "session still valid after logout"
 
 
 def admin_audit(page: Page, run: int) -> None:
@@ -176,8 +197,24 @@ def admin_audit(page: Page, run: int) -> None:
         expect(
             page.locator("table.data tbody tr td:nth-child(2)").filter(has_not_text=actor)
         ).to_have_count(0)
-    shot(page, run, "7-audit")
+    shot(page, run, "8-audit")
     logout(page)
+
+
+def wrong_password(page: Page, run: int) -> None:
+    """A wrong password and an unknown user get the same message: no account enumeration."""
+    messages = []
+    for user, password in (("alice", "not-her-password"), ("no-such-user", "whatever")):
+        page.goto(f"{BASE}/login")
+        page.get_by_label("Username").fill(user)
+        page.get_by_label("Password").fill(password)
+        page.get_by_role("button", name="Sign in").click()
+        alert = page.get_by_role("alert")
+        expect(alert).to_have_text("Invalid username or password.")
+        messages.append(alert.inner_text())
+        at(page, "/login")
+    assert messages[0] == messages[1], messages
+    shot(page, run, "9-wrong-password")
 
 
 with sync_playwright() as p:
@@ -191,6 +228,7 @@ with sync_playwright() as p:
         expert_capture(page, run)
         successor_answers(page, run)
         admin_audit(page, run)
+        wrong_password(page, run)
         context.close()
         print(f"run {run}/{args.runs} passed")
     browser.close()

@@ -18,7 +18,7 @@ Human approval is the boundary between system interpretation and approved knowle
 | Capture: review, revisioned drafts, explicit approval, immutable versions, OKF export with derived lifecycle (active/superseded/retired) | Done |
 | Verify: exercise generation, expert rubric review/release, successor attempts, criterion-level assessment, deterministic aggregate, retry/reassess | Done |
 | Model-backed extractor/generator/assessor (`SB_AI_PROVIDER=openai`) | Implemented and tested with a fake client; not exercised against a live model |
-| Web accounts: users, server-side sessions, role-based authorization, admin user management and audit log | Done |
+| Authentication: argon2 passwords, server-side sessions (HttpOnly cookie), role-based authorization on every route, admin user management, audit log | Done |
 | Multi-page website: `/login`, `/admin/*`, `/expert/*`, `/learn/*`, `/library`; SVG score chart | Done |
 | Browser e2e of the signed-in flow across admin, expert and successor (`e2e/demo_flow.py`) | Done |
 | Production hardening: HTTPS (`SB_SESSION_COOKIE_SECURE=true`), login rate limiting, password policy beyond length | Not done |
@@ -45,6 +45,9 @@ npm install
 npm run dev
 ```
 
+Then open http://localhost:5173/login and sign in with one of the demo accounts below.
+[`docs/DEMO.md`](docs/DEMO.md) is a five-minute demo script with answers to copy.
+
 Optional dependency groups in `backend/pyproject.toml`:
 
 | Group | Contents | When |
@@ -61,11 +64,17 @@ Without Docker, use a local PostgreSQL (user/password `postgres/postgres`), crea
 These accounts and passwords exist only for the local demo with synthetic data. Never reuse them,
 and never seed them in a real deployment.
 
-| Username | Password | Role | Person in the evidence |
+| Username | Password (demo only) | System role | Role in the demo handoff |
 |---|---|---|---|
-| `admin` | `Admin@123` | admin | — |
-| `alice` | `Alice@123` | member | `alice` (experienced engineer) |
-| `bob` | `Bob@123` | member | `bob` (successor) |
+| `admin` | `Admin@123` | admin | none: creates the handoff, runs the analysis, reads the audit log |
+| `alice` | `Alice@123` | member | experienced engineer (expert), person `alice` in the evidence |
+| `bob` | `Bob@123` | member | successor, person `bob` |
+
+- The successor can be a new hire from outside who does not appear in the evidence: any active
+  member account will do. Only the expert must appear in the evidence.
+- Separation of duties: an admin sets things up and can read everything, but cannot review,
+  approve or publish knowledge, author exercises or answer them, and can never be the expert or
+  the successor of a handoff.
 
 ### Walkthrough / Hướng dẫn
 
