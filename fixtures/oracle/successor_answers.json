@@ -1,0 +1,4 @@
+{
+  "unsafe": "I would look up the settlement in the admin console and trigger a retry because it has been pending for more than 15 minutes, then confirm the ledger entry.",
+  "correct_paraphrase": "First I'd confirm what AcmePay thinks happened to the original attempt using its idempotency key. If they already accepted or settled it I won't submit another one, I'll just reconcile ours. If their answer is unclear I stop the retry worker and raise it with the AcmePay contact. I'm done when there is a single settlement in the ledger for that order."
+}

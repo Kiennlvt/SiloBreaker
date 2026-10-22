@@ -1,0 +1,93 @@
+{
+  "id": "10347",
+  "key": "PAY-347",
+  "self": "https://acmepay.atlassian.net/rest/api/3/issue/10347",
+  "fields": {
+    "summary": "Settlement stuck PENDING again, retry queue backing up",
+    "issuetype": {
+      "name": "Incident"
+    },
+    "status": {
+      "name": "Done"
+    },
+    "components": [
+      {
+        "name": "settlement"
+      }
+    ],
+    "labels": [],
+    "priority": {
+      "name": "High"
+    },
+    "assignee": {
+      "accountId": "5f1a-alice",
+      "displayName": "Alice Tran"
+    },
+    "reporter": {
+      "accountId": "5f1a-carol",
+      "displayName": "Carol Le"
+    },
+    "created": "2026-08-02T14:20:00.000+0000",
+    "updated": "2026-08-02T16:10:00.000+0000",
+    "description": {
+      "type": "doc",
+      "version": 1,
+      "content": [
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "Same symptom as PAY-321 after the provider maintenance window."
+            }
+          ]
+        },
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "Retry worker wanted to resubmit 12 settlements."
+            }
+          ]
+        }
+      ]
+    },
+    "comment": {
+      "comments": [
+        {
+          "id": "103471",
+          "author": {
+            "accountId": "5f1a-alice",
+            "displayName": "Alice Tran"
+          },
+          "created": "2026-08-02T15:02:00.000+0000",
+          "body": {
+            "type": "doc",
+            "version": 1,
+            "content": [
+              {
+                "type": "paragraph",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "Paused the retry worker by hand. For each settlement I looked up the provider state before touching it."
+                  }
+                ]
+              },
+              {
+                "type": "paragraph",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "Nine were already SETTLED at the provider, three were unknown. I escalated the three unknown ones to the AcmePay contact instead of retrying."
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    }
+  }
+}

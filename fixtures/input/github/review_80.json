@@ -1,0 +1,14 @@
+{
+  "id": 80,
+  "user": {
+    "login": "carol-le",
+    "id": 3
+  },
+  "body": "Looks right. Does this cover the case where provider state is unknown? Alice handled that by hand in PAY-347.",
+  "state": "APPROVED",
+  "html_url": "https://github.com/acmepay/payment-platform/pull/1842#pullrequestreview-80",
+  "pull_request_url": "https://api.github.com/repos/acmepay/payment-platform/pulls/1842",
+  "submitted_at": "2026-08-05T09:30:00Z",
+  "commit_id": "ecdd80bb57125d7ba9641ffaa4d7d2c19d3f3091",
+  "author_association": "COLLABORATOR"
+}

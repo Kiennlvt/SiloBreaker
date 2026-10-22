@@ -1,0 +1,6 @@
+{
+  "path": "runbooks/settlement.md",
+  "title": "Settlement Runbook",
+  "updated_at": "2026-06-01T00:00:00Z",
+  "body": "# Settlement Runbook\n\n## Preconditions\n- You can locate the settlement attempt in the admin console.\n\n## Steps\n1. Look up the settlement by order ID.\n2. If the status is PENDING for more than 15 minutes, trigger a retry from the admin console.\n3. Confirm the ledger entry appears."
+}

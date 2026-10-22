@@ -1,0 +1,48 @@
+{
+  "id": "10290",
+  "key": "PAY-290",
+  "self": "https://acmepay.atlassian.net/rest/api/3/issue/10290",
+  "fields": {
+    "summary": "Check FX rate feed latency",
+    "issuetype": {
+      "name": "Task"
+    },
+    "status": {
+      "name": "To Do"
+    },
+    "components": [
+      {
+        "name": "fx-rates"
+      }
+    ],
+    "labels": [],
+    "priority": {
+      "name": "Medium"
+    },
+    "assignee": null,
+    "reporter": {
+      "accountId": "5f1a-dan",
+      "displayName": "Dan Pham"
+    },
+    "created": "2026-07-20T09:00:00.000+0000",
+    "updated": "2026-07-20T09:00:00.000+0000",
+    "description": {
+      "type": "doc",
+      "version": 1,
+      "content": [
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "Dan mentioned the FX feed seemed slow once. Not reproduced."
+            }
+          ]
+        }
+      ]
+    },
+    "comment": {
+      "comments": []
+    }
+  }
+}

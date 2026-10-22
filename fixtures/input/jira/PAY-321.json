@@ -1,0 +1,116 @@
+{
+  "id": "10321",
+  "key": "PAY-321",
+  "self": "https://acmepay.atlassian.net/rest/api/3/issue/10321",
+  "fields": {
+    "summary": "Settlement pending after provider acceptance",
+    "issuetype": {
+      "name": "Incident"
+    },
+    "status": {
+      "name": "Done"
+    },
+    "components": [
+      {
+        "name": "settlement"
+      }
+    ],
+    "labels": [],
+    "priority": {
+      "name": "High"
+    },
+    "assignee": {
+      "accountId": "5f1a-alice",
+      "displayName": "Alice Tran"
+    },
+    "reporter": {
+      "accountId": "5f1a-bob",
+      "displayName": "Bob Nguyen"
+    },
+    "created": "2026-07-08T09:12:00.000+0000",
+    "updated": "2026-07-08T11:40:00.000+0000",
+    "description": {
+      "type": "doc",
+      "version": 1,
+      "content": [
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "AcmePay returned accepted but our settlement row stayed PENDING for 40 minutes."
+            }
+          ]
+        },
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "Customer charged once, ledger shows no settlement."
+            }
+          ]
+        }
+      ]
+    },
+    "comment": {
+      "comments": [
+        {
+          "id": "103211",
+          "author": {
+            "accountId": "5f1a-alice",
+            "displayName": "Alice Tran"
+          },
+          "created": "2026-07-08T10:05:00.000+0000",
+          "body": {
+            "type": "doc",
+            "version": 1,
+            "content": [
+              {
+                "type": "paragraph",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "Checked the provider transaction state first. It was ACCEPTED, so I did not create a new settlement."
+                  }
+                ]
+              },
+              {
+                "type": "paragraph",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "Manually reconciled the existing attempt using its idempotency key and closed the gap in the ledger."
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "103212",
+          "author": {
+            "accountId": "5f1a-bob",
+            "displayName": "Bob Nguyen"
+          },
+          "created": "2026-07-08T11:30:00.000+0000",
+          "body": {
+            "type": "doc",
+            "version": 1,
+            "content": [
+              {
+                "type": "paragraph",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "Thanks, following the runbook I would have retried. Will watch next time."
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    }
+  }
+}
