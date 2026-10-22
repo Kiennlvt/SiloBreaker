@@ -28,6 +28,21 @@ describe("api error parsing", () => {
   });
 });
 
+describe("api requests", () => {
+  it("sends the session cookie, and the CSRF header only on writes", async () => {
+    const fetch = vi.fn(async () => new Response("{}", { status: 200, headers: { "content-type": "application/json" } }));
+    vi.stubGlobal("fetch", fetch);
+    await api.handoffs();
+    await api.review("f1", { action: "confirm", reason: "", expected_revision: 1 });
+    const [[, read], [, write]] = fetch.mock.calls as unknown as [string, RequestInit][];
+    expect(read.credentials).toBe("include");
+    expect(write.credentials).toBe("include");
+    expect((read.headers as Record<string, string>)["X-Requested-With"]).toBeUndefined();
+    expect((write.headers as Record<string, string>)["X-Requested-With"]).toBe("silobreaker");
+    expect(JSON.parse(write.body as string)).not.toHaveProperty("actor_id");
+  });
+});
+
 describe("describeError", () => {
   it("separates stale data, provider failures and other errors", () => {
     expect(describeError(new ApiError(409, "stale_revision", "x")).kind).toBe("stale");

@@ -1,13 +1,6 @@
+import { useState } from "react";
 import type { Finding } from "../types";
-
-const SIGNAL_NAMES: Record<string, string> = {
-  A: "Operational repetition",
-  D: "Documentation gap",
-  O: "Selected engineer participation",
-  M: "Manual intervention",
-  B: "Limited alternate recovery",
-};
-const WEIGHTS: Record<string, number> = { A: 25, D: 25, O: 20, M: 15, B: 15 };
+import ScoreChart, { fmt, SIGNAL_KEYS, SIGNAL_NAMES, signalBasis } from "./ScoreChart";
 
 const STATUS_LABEL: Record<Finding["eligibility_status"], string> = {
   ranked: "Ranked",
@@ -17,45 +10,32 @@ const STATUS_LABEL: Record<Finding["eligibility_status"], string> = {
   review_required: "Review required",
 };
 
-function signalDetail(key: string, f: Finding): string {
-  const c = f.counts;
-  switch (key) {
-    case "A":
-      return `${c.distinct_events} distinct event(s)`;
-    case "D":
-      return f.signals.D === null
-        ? "docs not imported"
-        : c.relevant_documents
-          ? f.missing_facets.length
-            ? `missing: ${f.missing_facets.map((m) => m.replace(/_/g, " ")).join(", ")}`
-            : "all facets covered"
-          : "no procedure found";
-    case "O":
-      return c.participation_share === null
-        ? `${c.attributable_events} attributable, too few`
-        : `${c.events_by_selected} of ${c.attributable_events} events`;
-    case "M":
-      return `${c.manual_events} manual event(s)`;
-    case "B":
-      return c.participation_share === null ? "unknown" : `${c.events_by_others} by others`;
-  }
-  return "";
+/** The first sentence of the system's interpretation; the rest sits under "Show calculation". */
+export function firstSentence(text: string): string {
+  const m = text.match(/^.*?[.!?](?=\s|$)/s);
+  return (m ? m[0] : text).trim();
 }
 
 export default function FindingCard({
   finding,
   selected,
   onSelect,
+  selectLabel = "Review with expert",
   onEvidence,
 }: {
   finding: Finding;
   selected: boolean;
   onSelect?: () => void;
+  selectLabel?: string;
   onEvidence: () => void;
 }) {
   const f = finding;
+  const [showCalc, setShowCalc] = useState(false);
+  const summary = firstSentence(f.summary);
+  const calcId = `calc-${f.id}`;
+
   return (
-    <article className={`finding ${selected ? "selected" : ""} status-${f.status}`}>
+    <article className={`finding ${selected ? "selected" : ""} status-${f.status}`} aria-label={f.title}>
       <header className="finding-head">
         <div>
           <h3>{f.title}</h3>
@@ -83,56 +63,78 @@ export default function FindingCard({
       </header>
 
       <div className="truth truth-system">System interpretation</div>
-      <p className="summary">{f.summary}</p>
+      <p className="summary">{summary}</p>
       {f.status_reason && <p className="small muted">Expert note: {f.status_reason}</p>}
 
-      <table className="signals">
-        <thead>
-          <tr>
-            <th scope="col">Signal</th>
-            <th scope="col">Value</th>
-            <th scope="col">× weight</th>
-            <th scope="col">Basis</th>
-          </tr>
-        </thead>
-        <tbody>
-          {Object.keys(SIGNAL_NAMES).map((k) => {
-            const v = f.signals[k as keyof Finding["signals"]];
-            return (
-              <tr key={k}>
-                <th scope="row">
-                  <span className="sig-key">{k}</span> {SIGNAL_NAMES[k]}
-                </th>
-                <td className="mono">{v === null ? "unknown" : v}</td>
-                <td className="mono">{v === null ? "—" : WEIGHTS[k] * v}</td>
-                <td className="muted small">{signalDetail(k, f)}</td>
-              </tr>
-            );
-          })}
-        </tbody>
-        <tfoot>
-          <tr>
-            <th scope="row">Raw score</th>
-            <td className="mono" colSpan={3}>
-              {f.raw_score ?? "not computed"}
-            </td>
-          </tr>
-        </tfoot>
-      </table>
-      {f.reasons.length > 0 && (
-        <ul className="reasons">
-          {f.reasons.map((r) => (
-            <li key={r}>{r}</li>
-          ))}
-        </ul>
+      <ScoreChart finding={f} />
+
+      <button
+        className="ghost small"
+        aria-expanded={showCalc}
+        aria-controls={calcId}
+        onClick={() => setShowCalc((v) => !v)}
+      >
+        {showCalc ? "Hide calculation" : "Show calculation"}
+      </button>
+      {showCalc && (
+        <div id={calcId} className="calc">
+          {summary !== f.summary && <p className="small">{f.summary}</p>}
+          <div className="table-wrap">
+            <table className="signals">
+              <thead>
+                <tr>
+                  <th scope="col">Signal</th>
+                  <th scope="col">Value</th>
+                  <th scope="col">Weight</th>
+                  <th scope="col">Points</th>
+                  <th scope="col">Basis</th>
+                </tr>
+              </thead>
+              <tbody>
+                {SIGNAL_KEYS.map((k) => {
+                  const v = f.signals[k];
+                  const c = f.contributions[k];
+                  return (
+                    <tr key={k}>
+                      <th scope="row">
+                        <span className="sig-key">{k}</span> {SIGNAL_NAMES[k]}
+                      </th>
+                      <td className="mono">{v === null ? "unknown" : v}</td>
+                      <td className="mono">{f.weights[k]}</td>
+                      <td className="mono">{c === null ? "—" : fmt(c)}</td>
+                      <td className="muted small">{signalBasis(k, f)}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+              <tfoot>
+                <tr>
+                  <th scope="row">Raw score</th>
+                  <td className="mono" colSpan={4}>
+                    {f.raw_score === null ? "not computed" : fmt(f.raw_score)}
+                    {f.review_priority !== null && ` → review priority ${f.review_priority}`}
+                  </td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+          {f.reasons.length > 0 && (
+            <ul className="reasons">
+              {f.reasons.map((r) => (
+                <li key={r}>{r}</li>
+              ))}
+            </ul>
+          )}
+        </div>
       )}
-      <footer className="row gap-s">
+
+      <footer className="row gap-s wrap">
         <button className="secondary" onClick={onEvidence}>
           Inspect {f.evidence_refs.length} citation{f.evidence_refs.length === 1 ? "" : "s"}
         </button>
         {onSelect && (
           <button onClick={onSelect} aria-pressed={selected}>
-            {selected ? "Selected for capture" : "Review with expert"}
+            {selected ? "Selected for capture" : selectLabel}
           </button>
         )}
       </footer>

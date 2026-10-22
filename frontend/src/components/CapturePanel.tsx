@@ -103,7 +103,7 @@ export default function CapturePanel({
     setDirty(true);
   };
   const review = (action: string) =>
-    run(() => api.review(detail.id, { action, reason, expected_revision: detail.revision, actor_id: expert }));
+    run(() => api.review(detail.id, { action, reason, expected_revision: detail.revision }));
   const latest = detail.versions[detail.versions.length - 1];
   const draftPublished = latest && detail.draft && latest.draft_revision === detail.draft.revision && !dirty;
 
@@ -114,7 +114,7 @@ export default function CapturePanel({
           <p className="eyebrow">Step 2 · Capture</p>
           <h2 id="capture-title">{detail.title}</h2>
         </div>
-        <span className="acting">Acting as {expert} (experienced engineer)</span>
+        <span className="acting">Experienced engineer: {expert}</span>
       </header>
       <ErrorNotice error={error} onReload={reload} />
 
@@ -223,7 +223,6 @@ export default function CapturePanel({
                     api.saveDraft(detail.id, {
                       content: clean(content),
                       expected_revision: detail.draft?.revision ?? null,
-                      author_id: expert,
                     }),
                   )
                 }
@@ -238,7 +237,6 @@ export default function CapturePanel({
                     api.publish(detail.id, {
                       expected_finding_revision: detail.revision,
                       draft_revision: detail.draft!.revision,
-                      approver_id: expert,
                     }),
                   )
                 }

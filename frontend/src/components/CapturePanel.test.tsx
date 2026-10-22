@@ -47,6 +47,14 @@ describe("CapturePanel", () => {
     expect(screen.queryByRole("button", { name: "Reload" })).not.toBeInTheDocument();
   });
 
+  it("never sends an actor; the backend takes it from the session", async () => {
+    vi.spyOn(api, "finding").mockResolvedValue(detail);
+    const review = vi.spyOn(api, "review").mockResolvedValue(detail);
+    render(<CapturePanel findingId="f1" onChanged={() => undefined} />);
+    await userEvent.click(await screen.findByRole("button", { name: "Confirm" }));
+    expect(review).toHaveBeenCalledWith("f1", { action: "confirm", reason: "", expected_revision: 1 });
+  });
+
   it("tells the expert when knowledge was already approved in an earlier analysis", async () => {
     vi.spyOn(api, "finding").mockResolvedValue({
       ...detail,

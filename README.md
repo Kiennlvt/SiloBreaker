@@ -18,7 +18,7 @@ Human approval is the boundary between system interpretation and approved knowle
 | Capture: review, revisioned drafts, explicit approval, immutable versions, OKF export with derived lifecycle (active/superseded/retired) | Done |
 | Verify: exercise generation, expert rubric review/release, successor attempts, criterion-level assessment, deterministic aggregate, retry/reassess | Done |
 | Model-backed extractor/generator/assessor (`SB_AI_PROVIDER=openai`) | Implemented and tested with a fake client; not exercised against a live model |
-| Authentication | Backend done: accounts, sessions, server-side authorization. Frontend not migrated yet (see below) |
+| Authentication | Accounts, sessions, server-side authorization, multi-page website by role. `e2e/demo_flow.py` not migrated yet |
 
 ## Quick start / Chạy nhanh
 
@@ -92,8 +92,9 @@ person is always the account's `person_id`; request bodies and query strings no 
 - **everyone signed in**: approved knowledge and OKF (`/api/library`).
 
 Demo accounts: `cd backend && python -m app.seed_users` creates `admin`, `alice`, `bob`
-(passwords in `app/seed_users.py`; demo data only). The React frontend and `e2e/demo_flow.py`
-still use the old unauthenticated API and will be migrated in the next phase.
+(passwords in `app/seed_users.py`; demo data only). The React frontend is a multi-page site:
+`/login`, `/admin/*` for administrators, `/expert/*` and `/learn/*` for members, `/library` for
+everyone signed in. `e2e/demo_flow.py` still drives the old single-page flow and must be updated.
 
 ## Repository layout
 
