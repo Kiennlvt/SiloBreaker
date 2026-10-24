@@ -21,6 +21,7 @@ Human approval is the boundary between system interpretation and approved knowle
 | Authentication: argon2 passwords, server-side sessions (HttpOnly cookie), role-based authorization on every route, admin user management, audit log | Done |
 | Multi-page website: `/login`, `/admin/*`, `/expert/*`, `/learn/*`, `/library`; SVG score chart | Done |
 | Browser e2e of the signed-in flow across admin, expert and successor (`e2e/demo_flow.py`) | Done |
+| Candidate selection: 2-4 candidates, anonymous attempts, readiness groups, admin selection, expert review (backend) | Done (no UI yet) |
 | Production hardening: HTTPS (`SB_SESSION_COOKIE_SECURE=true`), login rate limiting, password policy beyond length | Not done |
 
 ## Quick start / Chạy nhanh
@@ -36,7 +37,7 @@ cd backend
 python -m venv .venv && source .venv/bin/activate     # Windows: .venv\Scripts\activate
 pip install -e ".[dev]"            # add ,e2e for Playwright and ,ai for the OpenAI extractor
 alembic upgrade head
-python -m app.seed_users           # creates or updates the three demo accounts (safe to re-run)
+python -m app.seed_users           # creates or updates the five demo accounts (safe to re-run)
 uvicorn app.main:app --reload --port 8000
 
 # 3. Frontend on http://localhost:5173  (new terminal)
@@ -69,6 +70,8 @@ and never seed them in a real deployment.
 | `admin` | `Admin@123` | admin | none: creates the handoff, runs the analysis, reads the audit log |
 | `alice` | `Alice@123` | member | experienced engineer (expert), person `alice` in the evidence |
 | `bob` | `Bob@123` | member | successor, person `bob` |
+| `carol` | `Carol@123` | member | candidate, person `carol` (in the evidence) |
+| `minh` | `Minh@123` | member | candidate, person `minh` (new hire, not in the evidence) |
 
 - The successor can be a new hire from outside who does not appear in the evidence: any active
   member account will do. Only the expert must appear in the evidence.
@@ -92,7 +95,7 @@ and never seed them in a real deployment.
 ## Tests
 
 ```bash
-cd backend && pytest -q          # 134 tests against PostgreSQL (silobreaker_test)
+cd backend && pytest -q          # 157 tests against PostgreSQL (silobreaker_test)
 cd backend && ruff check app tests && ruff format --check app tests
 cd frontend && npm test          # 29 Vitest tests (jsdom)
 cd frontend && npm run build     # type-check + build
@@ -141,6 +144,33 @@ website hides what a role cannot do, but the backend checks every call again.
 Handoff rules: the expert must be an active member who appears in the evidence; the successor
 must be an active member but may be new to the project (an external hire); they must differ, and
 an admin can be neither. A new member's `person_id` defaults to their username.
+
+**Candidate selection.** `POST /api/handoffs` takes either `successor_id` (status `active`, as
+before) or `candidate_ids` (2-4 distinct active members, not the expert, not admins; they may be
+absent from the evidence), which creates a `selecting` handoff and gives each candidate a
+seeded alias `Candidate A`-`D`. While selecting:
+
+- every candidate may read released exercises (never the rubric) and answer them, after
+  `POST /api/handoffs/{id}/study-opened`; otherwise `409 study_required`;
+- each candidate gets `max_attempts` (default 2) assessed attempts per exercise; an attempt
+  that failed for a system error does not count; the next one is `409 attempt_limit`;
+- a candidate sees only their own attempts (`403 not_owner` otherwise);
+- the expert sees aliases, never person IDs or names, in every attempt view.
+
+`GET /api/handoffs/{id}/readiness` (admin only) groups each candidate by the best effective
+result of the latest released exercise: Ready (demonstrated), Ready with support (partial),
+Not yet (not_yet), or pending (no result or review_required). `recommended` is everyone in
+the highest group; `context` (incidents the candidate recovered in the handoff's areas, from
+the stored extraction) is shown with `scored: false` and never changes a group.
+`POST /api/handoffs/{id}/selection` (admin only) records an immutable `successor_selection`
+with the recommendation snapshot; choosing outside it needs a reason (`422 reason_required`);
+a second selection is `409 already_selected`.
+
+Review: the attempt's owner may call `POST /api/attempts/{id}/review-request` once on an
+assessed attempt; the expert answers with `POST /api/attempts/{id}/review`
+(`overrides: {criterion_id: met|partial|unmet}` and a required `reason`). The attempt is
+never changed: its effective result is the original verdicts with the overrides applied,
+recomputed by `aggregate()`.
 
 Not yet done for production: HTTPS with `SB_SESSION_COOKIE_SECURE=true`, login rate limiting,
 and a password policy beyond the 8-character minimum.

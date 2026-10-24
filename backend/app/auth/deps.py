@@ -38,13 +38,16 @@ def actor_label(user: AppUser) -> str:
 def handoff_role(user: AppUser, handoff: Handoff) -> str:
     """'admin', 'expert' or 'successor'. Anyone else is refused.
 
-    An admin is never a participant, even if the account also carries a person_id.
+    An admin is never a participant, even if the account also carries a person_id. While a
+    handoff is selecting, every candidate acts as a successor (own attempts only).
     """
     if user.role == "admin":
         return "admin"
     if user.person_id and user.person_id == handoff.expert_id:
         return "expert"
     if user.person_id and user.person_id == handoff.successor_id:
+        return "successor"
+    if handoff.candidate(user.person_id) is not None:
         return "successor"
     raise AppError(403, "not_participant", "you are not the expert or successor of this handoff")
 

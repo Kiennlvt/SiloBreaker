@@ -6,24 +6,43 @@ from sqlalchemy.orm import Session
 
 from app.auth.deps import current_user, handoff_role
 from app.db import tx
-from app.models import Analysis, AppUser, Attempt, Exercise, Finding, Handoff, KnowledgeVersion
+from app.models import (
+    Analysis,
+    AppUser,
+    Attempt,
+    Exercise,
+    Finding,
+    Handoff,
+    HandoffCandidate,
+    KnowledgeVersion,
+)
 
 router = APIRouter(prefix="/api", dependencies=[Depends(current_user)])
 
 
 @router.get("/me/exercises")
 def my_exercises(session: Session = Depends(tx), user: AppUser = Depends(current_user)) -> list:
-    """Exercises in handoffs I take part in. As successor I see released ones only, and only
-    my own attempts; the rubric is never part of this list."""
+    """Exercises in handoffs I take part in. As successor (or candidate of a selecting
+    handoff) I see released ones only, and only my own attempts; the rubric is never part of
+    this list."""
     if not user.person_id:
         return []
+    candidate_of = select(HandoffCandidate.handoff_id).where(
+        HandoffCandidate.person_id == user.person_id
+    )
     rows = session.execute(
         select(Exercise, KnowledgeVersion, Finding, Handoff)
         .join(KnowledgeVersion, Exercise.knowledge_version_id == KnowledgeVersion.id)
         .join(Finding, KnowledgeVersion.finding_id == Finding.id)
         .join(Analysis, Finding.analysis_id == Analysis.id)
         .join(Handoff, Analysis.handoff_id == Handoff.id)
-        .where(or_(Handoff.expert_id == user.person_id, Handoff.successor_id == user.person_id))
+        .where(
+            or_(
+                Handoff.expert_id == user.person_id,
+                Handoff.successor_id == user.person_id,
+                (Handoff.status == "selecting") & Handoff.id.in_(candidate_of),
+            )
+        )
         .order_by(Exercise.created_at.desc())
     ).all()
     out = []

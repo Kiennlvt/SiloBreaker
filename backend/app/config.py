@@ -30,6 +30,9 @@ class Settings(BaseSettings):
     session_ttl_hours: int = 8
     # Set true when served over HTTPS; the local dev server is plain HTTP.
     session_cookie_secure: bool = False
+    # Seeds the shuffle that gives candidates their "Candidate A".."D" aliases. Fixed so
+    # tests are repeatable; set a private value in a real deployment.
+    candidate_alias_seed: str = "silobreaker-demo"
 
 
 @lru_cache
