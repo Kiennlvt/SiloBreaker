@@ -21,7 +21,7 @@ Human approval is the boundary between system interpretation and approved knowle
 | Authentication: argon2 passwords, server-side sessions (HttpOnly cookie), role-based authorization on every route, admin user management, audit log | Done |
 | Multi-page website: `/login`, `/admin/*`, `/expert/*`, `/learn/*`, `/library`; SVG score chart | Done |
 | Browser e2e of the signed-in flow across admin, expert and successor (`e2e/demo_flow.py`) | Done |
-| Candidate selection: 2-4 candidates, anonymous attempts, readiness groups, admin selection, expert review (backend) | Done (no UI yet) |
+| Successor selection: choose later, Suitability (fit), common assessment, Results (score, top, tie), admin decision, expert review; browser e2e (`e2e/selection_flow.py`) | Done |
 | Production hardening: HTTPS (`SB_SESSION_COOKIE_SECURE=true`), login rate limiting, password policy beyond length | Not done |
 
 ## Quick start / Chạy nhanh
@@ -69,7 +69,7 @@ and never seed them in a real deployment.
 |---|---|---|---|
 | `admin` | `Admin@123` | admin | none: creates the handoff, runs the analysis, reads the audit log |
 | `alice` | `Alice@123` | member | experienced engineer (expert), person `alice` in the evidence |
-| `bob` | `Bob@123` | member | successor, person `bob` |
+| `bob` | `Bob@123` | member | successor in the demo flow; candidate in the selection flow (person `bob`, in the evidence) |
 | `carol` | `Carol@123` | member | candidate, person `carol` (in the evidence) |
 | `minh` | `Minh@123` | member | candidate, person `minh` (new hire, not in the evidence) |
 
@@ -91,16 +91,19 @@ and never seed them in a real deployment.
 3. Đăng nhập `bob` → **Learning** → mở bài tập (successor không thấy rubric), nộp câu trả lời, xem
    kết quả theo từng tiêu chí, **Try again** để nộp attempt mới.
 4. Đăng nhập `admin` → **Audit log** để xem hành động của cả ba người.
+5. Chọn người kế nhiệm: xem mục **Successor selection** bên dưới và cảnh 5 trong
+   [`docs/DEMO.md`](docs/DEMO.md).
 
 ## Tests
 
 ```bash
-cd backend && pytest -q          # 157 tests against PostgreSQL (silobreaker_test)
+cd backend && pytest -q          # 174 tests against PostgreSQL (silobreaker_test)
 cd backend && ruff check app tests && ruff format --check app tests
-cd frontend && npm test          # 29 Vitest tests (jsdom)
+cd frontend && npm test          # 40 Vitest tests (jsdom)
 cd frontend && npm run build     # type-check + build
 pip install -e "backend[e2e]" && playwright install chromium
 python e2e/demo_flow.py --runs 3 # admin -> expert -> successor -> audit; API (seeded) and dev server running
+python e2e/selection_flow.py --runs 3 # choose later -> Suitability -> common assessment -> Results -> decision
 # If the Chromium download is blocked: SB_E2E_BROWSER_CHANNEL=chrome (or msedge) uses an installed browser
 ```
 
@@ -140,40 +143,87 @@ website hides what a role cannot do, but the backend checks every call again.
 | See released exercises and answer them | | | ✓ | |
 | See attempts and results | ✓ | ✓ | own only | |
 | Read approved knowledge and OKF (`/library`) | ✓ | ✓ | ✓ | ✓ |
+| Suitability, common assessment, Results, select the successor | ✓ | | | |
+| Request a review of an own assessed attempt | | | ✓ (and candidates) | |
+| Review an attempt (change verdicts with a reason) | | ✓ | | |
 
 Handoff rules: the expert must be an active member who appears in the evidence; the successor
 must be an active member but may be new to the project (an external hire); they must differ, and
 an admin can be neither. A new member's `person_id` defaults to their username.
 
-**Candidate selection.** `POST /api/handoffs` takes either `successor_id` (status `active`, as
-before) or `candidate_ids` (2-4 distinct active members, not the expert, not admins; they may be
-absent from the evidence), which creates a `selecting` handoff and gives each candidate a
-seeded alias `Candidate A`-`D`. While selecting:
-
-- every candidate may read released exercises (never the rubric) and answer them, after
-  `POST /api/handoffs/{id}/study-opened`; otherwise `409 study_required`;
-- each candidate gets `max_attempts` (default 2) assessed attempts per exercise; an attempt
-  that failed for a system error does not count; the next one is `409 attempt_limit`;
-- a candidate sees only their own attempts (`403 not_owner` otherwise);
-- the expert sees aliases, never person IDs or names, in every attempt view.
-
-`GET /api/handoffs/{id}/readiness` (admin only) groups each candidate by the best effective
-result of the latest released exercise: Ready (demonstrated), Ready with support (partial),
-Not yet (not_yet), or pending (no result or review_required). `recommended` is everyone in
-the highest group; `context` (incidents the candidate recovered in the handoff's areas, from
-the stored extraction) is shown with `scored: false` and never changes a group.
-`POST /api/handoffs/{id}/selection` (admin only) records an immutable `successor_selection`
-with the recommendation snapshot; choosing outside it needs a reason (`422 reason_required`);
-a second selection is `409 already_selected`.
-
-Review: the attempt's owner may call `POST /api/attempts/{id}/review-request` once on an
-assessed attempt; the expert answers with `POST /api/attempts/{id}/review`
-(`overrides: {criterion_id: met|partial|unmet}` and a required `reason`). The attempt is
-never changed: its effective result is the original verdicts with the overrides applied,
-recomputed by `aggregate()`.
-
 Not yet done for production: HTTPS with `SB_SESSION_COOKIE_SECURE=true`, login rate limiting,
 and a password policy beyond the 8-character minimum.
+
+## Successor selection
+
+When the successor is not obvious, the administrator creates the handoff with **Choose successor
+later** (status `unassigned`), shortlists people on **Suitability**, runs one **common
+assessment**, compares **Results** and makes the decision. The system computes two numbers to
+support that decision. Neither number decides; the administrator always makes the final choice
+and it is recorded.
+
+### The two percentages
+
+| | Fit (Suitability tab) | Score (Results tab) |
+|---|---|---|
+| When | after an analysis, before any assessment | after the common assessment |
+| Question | has this person recovered incidents in this handoff's high-priority areas? | how much of the exercise did the answer cover? |
+| Input | cited events in the stored extraction of the latest analysis (resolver passed citation validation) | the assessor's criterion verdicts, with any expert review overrides applied |
+| Formula | Σ(review_priority × experience) / Σ review_priority × 100 over areas with `eligibility_status = ranked`; experience = 0 (never resolver), 0.5 (one incident), 1 (two or more) | Σ(weight × credit) / Σ weight × 100; weight 2 for a critical criterion, 1 otherwise; credit met 1, partial 0.5, unmet 0 |
+| Rounding | half up (`round_half_up`) | half up |
+| Demo values | Bob 20% (60 × 0.5 / 148), Carol 20%, Minh **No history — not 0%** | Bob 100%, Carol 86%, Minh 21% (offline assessor on the fixture answers) |
+| Used for | shortlisting only, never choosing | decision support |
+
+No history is not a score of zero: it means the evidence holds no cited recovery by that person
+in the ranked areas (for example a new hire). The page says so instead of drawing a 0% bar.
+
+### Top, tie and reasons
+
+1. Candidates who have not submitted, or whose result is `review_required`, are not ranked;
+   they appear in the warnings.
+2. The rest are ranked by `aggregate()` result first (demonstrated > partial > not_yet), then by
+   score inside the best group. **Top** is everyone with the highest score in the best group
+   among demonstrated and partial. A `not_yet` answer missed a critical condition and is never
+   top, whatever its score; it gets the badge *Missing a critical condition*.
+3. **Tie**: two or more people share the top. The badge says *Tie — admin decides*.
+4. If nobody reached demonstrated or partial, the top is empty and the warning
+   `no_candidate_meets_all_critical` is shown. The admin can still choose, with a reason.
+5. Choosing anyone in the top needs no reason. Choosing anyone else needs one
+   (`422 reason_required`). A second decision is `409 already_selected`.
+6. `successor_selection` is append-only (a database trigger rejects UPDATE and DELETE). It keeps
+   the snapshot the decision was made against: `top_ids`, `tie`, `is_top`, the phase-1
+   `recommended` / `in_recommended`, the reason, who decided and when. `successor.selected`
+   goes to the audit log.
+
+### Rules of the common assessment
+
+- `POST /api/handoffs/{id}/assessment` (admin, `unassigned` handoff only): 2–4 distinct active
+  members, not the expert, not admins, who may be absent from the evidence; one **released**
+  exercise of this handoff; a due time in the future. Each candidate gets an alias
+  `Candidate A`–`D` (seeded shuffle, `SB_CANDIDATE_ALIAS_SEED`).
+- One official attempt per candidate. An attempt that failed because of a system error does
+  not count. A further attempt is `409 attempt_limit`; after the due time, `409 assessment_closed`;
+  another exercise, `409 not_assessment_exercise`.
+- A candidate must open the approved knowledge first (`POST /api/handoffs/{id}/study-opened`,
+  the **Read the approved knowledge** button); before that, `409 study_required`.
+- Results are private: a candidate sees only their own attempt and score (`403 not_owner`
+  otherwise). While selecting, the expert sees aliases, never names, in every attempt view.
+- A candidate may request one review of an assessed attempt; the expert changes criterion
+  verdicts with a required reason. The attempt is never changed; its effective result is
+  recomputed by `aggregate()` and its score by the formula above.
+- **Assign directly** (`POST /api/handoffs/{id}/assign`) skips the assessment when one person
+  is clearly right.
+- `GET /api/handoffs/{id}/suitability` and `GET /api/handoffs/{id}/readiness` are admin only.
+  Every number on both tabs comes from these endpoints; the browser never recomputes a score.
+
+### Limits
+
+- A score reflects one exercise on one knowledge area, not overall ability. Fit reflects only
+  what the supplied evidence records; work that left no cited trace counts as no history.
+- The offline assessor is a lexical matcher. A wrong verdict is corrected through review, not
+  by editing the attempt.
+- A handoff created with `candidate_ids` directly (phase 1 API, kept for compatibility) has no
+  due time and allows `max_attempts` = 2; the website uses the common assessment instead.
 
 ## Repository layout
 

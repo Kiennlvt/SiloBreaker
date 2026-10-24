@@ -605,6 +605,22 @@ def suitability(session: Session, handoff: Handoff) -> dict:
             }
         )
     rows.sort(key=lambda r: (r["fit_pct"] is None, -(r["fit_pct"] or 0), r["person_id"]))
+    released = []
+    for e in handoff_exercises(session, handoff):
+        if e.status != "ready":
+            continue
+        version = session.get(KnowledgeVersion, e.knowledge_version_id)
+        finding = session.get(Finding, version.finding_id)
+        released.append(
+            {
+                "id": str(e.id),
+                "title": finding.title,
+                "area_key": finding.area_key,
+                "knowledge_version_no": version.version_no,
+                "approved_at": e.approved_at,
+            }
+        )
+    released.sort(key=lambda e: e["approved_at"], reverse=True)
     return {
         "handoff_id": str(handoff.id),
         "status": handoff.status,
@@ -615,6 +631,8 @@ def suitability(session: Session, handoff: Handoff) -> dict:
         ],
         "total_priority": sum(priorities.values()),
         "members": rows,
+        # What a common assessment can use: released exercises of this handoff, newest first.
+        "released_exercises": released,
         "note": "Fit is based on cited recoveries in the evidence only. "
         "It is used to shortlist, not to choose.",
     }

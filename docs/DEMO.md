@@ -2,7 +2,9 @@
 
 A scripted walk through the signed-in website: an administrator sets up a handoff, the
 experienced engineer captures missing knowledge, the successor proves they can use it, and the
-audit log shows who did what. The same path is automated in `e2e/demo_flow.py`.
+audit log shows who did what. The same path is automated in `e2e/demo_flow.py`. Scene 5 shows
+how the administrator chooses a successor among several people; it is automated in
+`e2e/selection_flow.py`.
 
 ## Before you start
 
@@ -18,7 +20,9 @@ Open http://localhost:5173/login. Demo accounts (passwords for this demo only):
 |---|---|---|
 | `admin` | `Admin@123` | administrator |
 | `alice` | `Alice@123` | experienced engineer handing over |
-| `bob` | `Bob@123` | successor |
+| `bob` | `Bob@123` | successor (scenes 1–4); candidate (scene 5) |
+| `carol` | `Carol@123` | candidate (scene 5), appears in the evidence |
+| `minh` | `Minh@123` | candidate (scene 5), a new hire with no history in the evidence |
 
 Each step below lists **what to click or type**, **what you should see**, and **why it matters**.
 
@@ -86,6 +90,33 @@ admin page is refused, and after logout the session is revoked, so Back cannot r
 recorded with the person who did it and cannot be edited afterwards (the database rejects updates
 to `audit_event`).
 
+## 5. Choosing a successor among several people (≈ 4 min)
+
+Start from a fresh reset. This scene replaces steps 1.3 and 3.x: nobody is named successor up
+front.
+
+| # | Do | You see |
+|---|---|---|
+| 5.1 | As `admin`: **Handoffs** → **Reset demo**. Choose *Alice* as experienced engineer and **Choose successor later** as successor. Click **Create handoff**, then **Run analysis**. Log out. | *Alice → successor not chosen · choose successor later*. |
+| 5.2 | As `alice`: do steps 2.2–2.10 (confirm Settlement, capture, approve v1, generate and release the exercise). In the draft, the steps and conditions can be edited to the approved wording below. Log out. | The exercise is *released*. |
+| 5.3 | As `admin`: **Handoffs** → **Choose successor**. | The **Suitability** tab: *Bob 20%*, *Carol 20%* with bars and their basis (*Webhooks recovery: PAY-…*), and *Minh — No history — not 0%*. The note says fit is used to shortlist, not to choose. |
+| 5.4 | Tick **Bob**, **Carol** and **Minh**. Click **Start common assessment**, keep the released exercise and the due date, click **Start assessment**. | The **Results** tab: three rows marked *Not submitted*. (With one person ticked, the button is **Assign directly** instead.) Log out. |
+| 5.5 | As `bob`: **Learning** → **Start**. | The banner *You are one of 3 candidates · same exercise · one official attempt · due … · results are private*. **Submit answer** is disabled. |
+| 5.6 | Click **Read the approved knowledge**, read it, click **Back to your exercise**. Paste the **correct paraphrase** and click **Submit answer**. | *Demonstrated in this exercise*, *Your score: 100%* and **Request review**. There is no **Submit answer** or **Try again** any more. Log out. |
+| 5.7 | Repeat 5.5–5.6 as `carol` with the **partial answer** and as `minh` with the **unsafe answer**. | Carol: *Partially demonstrated*, 86%. Minh: *Not yet demonstrated*, 21%. |
+| 5.8 | As `alice`: **Open Detect** → **Review with expert** on Settlement recovery → **Open exercise for v1**. | Three attempts labelled *Candidate A/B/C*; no names anywhere. |
+| 5.9 | As `admin`: **Handoffs** → **Choose successor** → **Results**. | Bob 100% **Best result**, Carol 86% *Ready with support*, Minh 21% **Missing a critical condition**. **Details** lists each criterion, critical ones marked. The note says the scores are decision support for one exercise, not overall ability. |
+| 5.10 | Click **Select as successor** on Carol. | The reason is required (Carol is not in the top), and **Confirm selection** stays disabled until you write one. Click **Cancel**. |
+| 5.11 | Click **Select as successor** on Bob, then **Confirm selection**. | *Decision: Bob (Candidate …) selected by admin on …; In the top result: yes; Tie: no; Reason: none given.* |
+| 5.12 | **Audit log**, Action `successor.selected`, **Apply filters**. | One event with the selection and the top it was made against. |
+
+**Why it matters:** the two numbers answer different questions. Fit only says who has handled
+these incidents before, from cited evidence; a new hire is *No history*, not 0%. The common
+assessment gives every candidate the same exercise, the same study material and one official
+attempt, and only the administrator sees names next to results. The ranking puts anyone who
+missed a critical condition below everyone who did not, a tie is shown as a tie, and choosing
+outside the top is allowed but needs a written reason that stays in the record.
+
 ---
 
 ## Answers to copy
@@ -101,6 +132,19 @@ to `audit_event`).
 **Correct paraphrase (step 3.4):**
 
 > First I'd confirm what AcmePay thinks happened to the original attempt using its idempotency key. If they already accepted or settled it I won't submit another one, I'll just reconcile ours. If their answer is unclear I stop the retry worker and raise it with the AcmePay contact. I'm done when there is a single settlement in the ledger for that order.
+
+**Partial answer (step 5.7, Carol):**
+
+> I would check with AcmePay what state the existing settlement attempt is in. If AcmePay already accepted or settled it, I will not submit a new settlement. If the provider state is unclear, I pause the retry worker and escalate to the AcmePay contact.
+
+**Approved wording for step 5.2** (the scores above are for this rubric; `e2e/selection_flow.py`
+enters it): preconditions *The existing settlement attempt and its idempotency key can be
+located*; steps *Check the provider transaction state for the existing attempt*, *Check the
+idempotency key on the existing attempt*, *Reconcile the existing attempt instead of creating a
+new one*; stop and escalate *Do not create a new settlement when the provider reports ACCEPTED
+or SETTLED*, *Pause the retry worker and escalate to the AcmePay contact when the provider state
+is unknown or contradictory*; success check *The ledger shows exactly one settlement for the
+order*. With the unedited **Structure my answer** draft the rubric differs, and so do the scores.
 
 ## If something goes wrong
 

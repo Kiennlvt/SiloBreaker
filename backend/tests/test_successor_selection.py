@@ -175,6 +175,17 @@ def test_suitability_fits_bob_carol_and_no_history_for_minh(client):
     assert basis[0]["incidents"][0].startswith("PAY-")
     assert [m["person_id"] for m in s["members"]][-1] == "minh"  # no history sorts last
     assert "not to choose" in s["note"]
+    assert s["released_exercises"] == []
+
+
+def test_suitability_lists_released_exercises_for_the_assessment(client, unassigned):
+    h, ex = unassigned["handoff"], unassigned["exercise"]
+    # A draft exercise is not offered.
+    login_as(client, EXPERT).post(f"/api/knowledge/{unassigned['version']['id']}/exercises")
+    s = login_as(client, "admin").get(f"/api/handoffs/{h['id']}/suitability").json()
+    assert [
+        (e["id"], e["area_key"], e["knowledge_version_no"]) for e in s["released_exercises"]
+    ] == [(ex["id"], "settlement", 1)]
 
 
 def test_only_admin_reads_suitability(client):
