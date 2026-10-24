@@ -265,3 +265,45 @@ a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   .mainnav a { padding: 6px 8px; }
   .side { overflow: visible; }
 }
+
+/* ---------- Successor selection (every number comes from the API) ---------- */
+.tabs { display: flex; gap: 4px; flex-wrap: wrap; border-bottom: 1px solid var(--line); }
+.tab { background: transparent; color: var(--muted); border: none; border-bottom: 2px solid transparent; border-radius: 0; padding: 8px 12px; font-weight: 500; }
+.tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+.pct { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.pct-bar { height: 10px; flex: 1 1 auto; min-width: 60px; max-width: 220px; }
+.pct-fill { fill: var(--accent); }
+.pct-num { font-variant-numeric: tabular-nums; font-weight: 600; min-width: 3.2em; text-align: right; }
+.fit-cell { min-width: 160px; }
+.no-history { color: var(--muted); font-style: italic; }
+.basis-item { display: block; }
+.row-check { width: 18px; height: 18px; margin: 0; }
+.badges { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.badge { font-size: 0.75rem; border-radius: 999px; padding: 1px 9px; border: 1px solid var(--line); white-space: nowrap; }
+.badge-best { background: var(--human-bg); color: var(--human); border-color: transparent; }
+.badge-tie { background: var(--system-bg); color: var(--system); border-color: transparent; }
+.badge-critical { background: #fbeaea; color: var(--danger); border-color: transparent; }
+.badge-pending { color: var(--system); }
+.badge-muted { color: var(--muted); }
+.chip-critical { color: var(--danger); border-color: #efc9c9; margin-left: 4px; }
+.warnings { margin: 0; padding: 8px 12px 8px 28px; background: var(--system-bg); color: var(--system); border-radius: 8px; font-size: 0.88rem; }
+.decision { border: 1px solid var(--human); background: var(--human-bg); border-radius: 8px; padding: 10px 12px; }
+.decision h4 { margin: 0 0 4px; }
+.details-row td { background: #fbfaf6; }
+.candidate-banner { margin: 0; padding: 8px 12px; border-radius: 8px; background: var(--source-bg); color: var(--source); font-size: 0.9rem; }
+.score-line { margin: 0; }
+.review-form select { width: 100%; min-width: 0; }
+.modal-backdrop { position: fixed; inset: 0; background: #1d243355; display: grid; place-items: center; padding: 16px; z-index: 20; }
+.modal { background: #fff; border-radius: var(--radius); padding: 18px; width: min(480px, 100%); max-height: calc(100vh - 32px); overflow: auto; display: grid; gap: 10px; box-shadow: 0 10px 40px #0003; }
+.modal select { width: 100%; min-width: 0; }
+
+/* Narrow screens: each table row becomes a card, so nothing scrolls sideways at 390px. */
+@media (max-width: 600px) {
+  .stack-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  .stack-table, .stack-table tbody, .stack-table tr, .stack-table td { display: block; width: 100%; }
+  .stack-table tr { border-bottom: 1px solid var(--line); padding: 6px 0; }
+  .stack-table td { border-bottom: none; padding: 3px 0; }
+  .stack-table td[data-label]::before { content: attr(data-label); display: block; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
+  .fit-cell { min-width: 0; }
+  .pct-bar { max-width: none; }
+}
