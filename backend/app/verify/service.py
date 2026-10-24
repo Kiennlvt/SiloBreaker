@@ -95,7 +95,7 @@ def _require(handoff: Handoff, actor: str, wanted: str) -> None:
         raise AppError(403, f"not_{wanted}", f"only the handoff's {wanted} may do this")
 
 
-def _require_live(session: Session, version: KnowledgeVersion, finding: Finding) -> None:
+def require_live(session: Session, version: KnowledgeVersion, finding: Finding) -> None:
     if finding.status != "confirmed":
         raise AppError(
             409, "invalid_transition", f"knowledge of a {finding.status} finding cannot be tested"
@@ -138,7 +138,7 @@ def create_exercise(
 ) -> Exercise:
     finding, handoff = version_context(session, version)
     _require(handoff, actor, "expert")
-    _require_live(session, version, finding)
+    require_live(session, version, finding)
     generator = generator or get_generator()
     try:
         draft = generator.generate(finding.title, version.approved_content)
@@ -193,7 +193,7 @@ def approve_exercise(
     _check_revision(exercise, expected_revision)
     if exercise.status != "draft":
         raise AppError(409, "invalid_transition", f"exercise is already {exercise.status}")
-    _require_live(session, version, finding)
+    require_live(session, version, finding)
     exercise.status = "ready"
     exercise.approved_by = actor
     exercise.approved_at = datetime.now(UTC)

@@ -230,6 +230,7 @@ def attempt_out(
     label: str | None = None,
     review: AttemptReview | None = None,
     effective_result: str | None = None,
+    score_pct: int | None = None,
 ) -> dict:
     """`label` replaces the learner's person_id (a candidate alias for the expert)."""
     out = {
@@ -243,6 +244,8 @@ def attempt_out(
         "assessment_error": a.assessment_error,
         "aggregate_result": a.aggregate_result,
         "effective_result": effective_result or a.aggregate_result,
+        # Weighted criterion credit computed by app.verify.selection; null until assessed.
+        "score_pct": score_pct,
         "review": review_out(review),
         "results": _results(a, exercise.rubric, viewer in FULL_VIEW),
         "created_at": a.created_at,
@@ -259,8 +262,10 @@ def exercise_out(
     viewer: str,
     attempts: list[Attempt],
     extras: dict | None = None,
+    candidate: dict | None = None,
 ) -> dict:
-    """`extras` maps an attempt id to the keyword arguments of attempt_out."""
+    """`extras` maps an attempt id to the keyword arguments of attempt_out. `candidate` is the
+    viewer's own place in a successor selection (count, due time, attempts left)."""
     extras = extras or {}
     out = {
         "id": str(e.id),
@@ -271,6 +276,7 @@ def exercise_out(
         "approved_at": e.approved_at,
         "viewer_role": viewer,
         "attempts": [attempt_out(a, e, version, viewer, **extras.get(a.id, {})) for a in attempts],
+        "candidate": candidate,
     }
     if viewer in FULL_VIEW:
         out |= {

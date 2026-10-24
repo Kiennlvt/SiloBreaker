@@ -449,7 +449,7 @@ def test_review_override_recomputes_group_without_touching_the_attempt(client, a
     assert by_person["minh"]["group"] == "ready"
     assert by_person["minh"]["best_attempt_id"] == second["id"]
     c1 = next(c for c in by_person["minh"]["criteria"] if c["criterion_id"] == "C1")
-    assert c1 == {"criterion_id": "C1", "verdict": "met", "overridden": True}
+    assert (c1["verdict"], c1["overridden"], c1["critical"]) == ("met", True, True)
     assert out["recommended"] == ["bob", "minh"]
 
     mine = login_as(client, "minh").get(f"/api/attempts/{second['id']}").json()

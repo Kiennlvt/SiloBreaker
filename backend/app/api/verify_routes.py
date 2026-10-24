@@ -43,6 +43,7 @@ def _attempt_extras(
         "label": label,
         "review": review,
         "effective_result": Sel.effective_result(attempt, exercise, review),
+        "score_pct": Sel.effective_score(attempt, exercise, review),
     }
 
 
@@ -53,7 +54,8 @@ def _exercise_view(session: Session, exercise: Exercise, user: AppUser) -> dict:
         raise AppError(403, "not_released", "this exercise has not been released yet")
     attempts = _attempts(session, exercise, r, user)
     extras = {a.id: _attempt_extras(session, a, exercise, handoff, r) for a in attempts}
-    return S.exercise_out(exercise, version, r, attempts, extras)
+    candidate = Sel.candidate_view(session, handoff, exercise, user.person_id)
+    return S.exercise_out(exercise, version, r, attempts, extras, candidate)
 
 
 def _attempt_view(session: Session, attempt: Attempt, user: AppUser) -> dict:

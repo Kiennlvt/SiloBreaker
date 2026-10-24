@@ -94,9 +94,9 @@ class EvidenceChunk(Base):
 class Handoff(Base):
     __tablename__ = "handoff"
     __table_args__ = (
-        CheckConstraint("status in ('selecting','active')", name="ck_handoff_status"),
+        CheckConstraint("status in ('unassigned','selecting','active')", name="ck_handoff_status"),
         CheckConstraint(
-            "status = 'selecting' or successor_id is not null",
+            "status in ('unassigned','selecting') or successor_id is not null",
             name="ck_handoff_successor_when_active",
         ),
         CheckConstraint("max_attempts >= 1", name="ck_handoff_max_attempts"),
@@ -105,12 +105,19 @@ class Handoff(Base):
     project_key: Mapped[str] = mapped_column(Text, nullable=False)
     bundle_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("evidence_bundle.id"), nullable=False)
     expert_id: Mapped[str] = mapped_column(Text, nullable=False)
-    # Null while the handoff is 'selecting'; set by the admin's successor selection.
+    # Null while 'unassigned' or 'selecting'; set by direct assignment or the admin's selection.
     successor_id: Mapped[str | None] = mapped_column(Text)
     status: Mapped[str] = mapped_column(Text, nullable=False, default="active")
     max_attempts: Mapped[int] = mapped_column(
         Integer, nullable=False, default=2, server_default="2"
     )
+    # Common assessment: the one released exercise every candidate answers, and its due time.
+    # use_alter breaks the handoff -> exercise -> ... -> handoff foreign-key cycle.
+    assessment_exercise_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("exercise.id", use_alter=True)
+    )
+    assessment_due_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    assessment_started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = _now()
 
     candidates: Mapped[list["HandoffCandidate"]] = relationship(
@@ -152,6 +159,10 @@ class SuccessorSelection(Base):
     selected_person_id: Mapped[str] = mapped_column(Text, nullable=False)
     recommended: Mapped[list] = mapped_column(JSONB, nullable=False)
     in_recommended: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    # Score-based top at decision time (phase 2). Null on rows decided before it existed.
+    top_ids: Mapped[list | None] = mapped_column(JSONB)
+    tie: Mapped[bool | None] = mapped_column(Boolean)
+    is_top: Mapped[bool | None] = mapped_column(Boolean)
     reason: Mapped[str | None] = mapped_column(Text)
     decided_by: Mapped[str] = mapped_column(Text, nullable=False)
     decided_at: Mapped[datetime] = mapped_column(
