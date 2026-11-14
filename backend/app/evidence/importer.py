@@ -7,7 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.errors import AppError
-from app.evidence.adapters import ADAPTERS
+from app.evidence.adapters import ADAPTERS, CORE_FAMILIES
 from app.evidence.contract import EvidenceItemInput, Identities, sha256_json, sha256_text
 from app.models import EvidenceBundle, EvidenceChunk, EvidenceItem
 
@@ -31,6 +31,8 @@ def source_inventory(manifest: dict) -> dict[str, str]:
     files = manifest.get("files", {})
     inventory = {}
     for family in ADAPTERS:
+        if family not in CORE_FAMILIES and family not in declared and not files.get(family):
+            continue
         default = "included" if files.get(family) else "unavailable"
         inventory[family] = declared.get(family, default)
     return inventory

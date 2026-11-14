@@ -251,6 +251,36 @@ A generic document adapter is useful for Markdown/text runbooks in the fixture c
 }
 ```
 
+## GitLab adapters (public GitLab.com data)
+
+`scripts/fetch_gitlab_bundle.py` writes GitLab REST v4 responses verbatim, wrapped with their notes:
+
+```json
+{"issue": { "iid": 17000, "issue_type": "incident", "state": "closed",
+            "labels": ["incident", "Service::Patroni"], "assignees": [...],
+            "references": {"full": "gitlab-com/gl-infra/production#17000"}, "web_url": "..." },
+ "notes": [ {"id": 1, "body": "...", "author": {...}, "system": false} ]}
+```
+
+```json
+{"merge_request": { "iid": 9, "source_branch": "...", "references": {"full": "gitlab-com/runbooks!9"} },
+ "notes": [...],
+ "related_issues": ["gitlab-com/gl-infra/production#17000"]}
+```
+
+| Family | `source_type` | `external_id` | Notes |
+|---|---|---|---|
+| `gitlab_issue` | `issue:<issue_type>`, `issue_note` | `references.full`, `<ref>#note_<id>` | `components` = values of `Service::` labels; `status` = `state`; `aliases` = `web_url` |
+| `gitlab_mr` | `merge_request`, `merge_request_note` | `references.full`, `<ref>#note_<id>` | `head_ref` = `source_branch`; `related_issues` as GitLab's `related_merge_requests` endpoint reports them, never inferred |
+
+- Identities use the provider key `gitlab` for issues and MRs alike. An unmapped user becomes
+  `gitlab:<username>`.
+- Notes with `system: true` ("changed the label", "mentioned in") are dropped because they are not
+  human evidence.
+- Runbooks are ordinary `document` records with an optional `url` back to the public file.
+- `gitlab_issue` and `gitlab_mr` appear in a bundle's source inventory only when its manifest
+  declares them or supplies files, so existing Jira/Slack/GitHub bundles keep the same inventory.
+
 ## Fixture repository structure
 
 ```text

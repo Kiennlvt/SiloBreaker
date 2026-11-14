@@ -12,6 +12,12 @@ TEST_DB = os.environ.get(
     "SB_TEST_DATABASE_URL", "postgresql+psycopg://postgres:postgres@localhost:5432/silobreaker_test"
 )
 os.environ["SB_DATABASE_URL"] = TEST_DB
+# The suite never depends on a developer's .env: process env vars outrank .env in
+# pydantic-settings, so every test starts with the offline providers. A test that needs a
+# live provider opts in explicitly, by monkeypatching the setting (see
+# test_assistant_agent_live.py, gated on SB_ASSISTANT_LIVE=1).
+os.environ["SB_AI_PROVIDER"] = "offline"
+os.environ["SB_ASSISTANT_PROVIDER"] = "offline"
 
 BACKEND = Path(__file__).resolve().parents[1]
 ORACLE = BACKEND.parent / "fixtures" / "oracle"

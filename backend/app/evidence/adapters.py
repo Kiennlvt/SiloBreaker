@@ -226,9 +226,144 @@ class DocumentAdapter(_FileAdapter):
                 timestamp=_parse_time(record.get("updated_at")),
                 title=record.get("title"),
                 body=_bounded(record["body"]),
+                url=record.get("url"),  # optional: a link back to a public original
                 metadata={"path": record["path"]},
             )
         ]
 
 
-ADAPTERS = {a.source: a for a in (JiraAdapter, SlackAdapter, GitHubAdapter, DocumentAdapter)}
+class _GitLabAdapter(_FileAdapter):
+    """GitLab REST v4 records, stored as `{"<object>": <API object>, "notes": [<API notes>]}`.
+
+    Both parts are verbatim API responses (see scripts/fetch_gitlab_bundle.py). Identities use
+    the provider key "gitlab" for issues and merge requests alike: one GitLab account.
+    """
+
+    def _author(self, user: dict[str, Any] | None):
+        user = user or {}
+        return self.identities.resolve("gitlab", user.get("username"), user.get("name"))
+
+    def _notes(
+        self, notes: list[dict[str, Any]], parent: str, url: str, kind: str
+    ) -> list[EvidenceItemInput]:
+        out = []
+        for n in notes:
+            if n.get("system"):  # "changed the label", "mentioned in": not human evidence
+                continue
+            author = self._author(n.get("author"))
+            out.append(
+                EvidenceItemInput(
+                    source=self.source,
+                    source_type=f"{kind}_note",
+                    external_id=f"{parent}#note_{n['id']}",
+                    parent_external_id=parent,
+                    author=author,
+                    participants=[author.id] if author else [],
+                    timestamp=_parse_time(n.get("created_at")),
+                    title=f"Note on {parent}",
+                    body=_bounded(n.get("body") or ""),
+                    url=f"{url}#note_{n['id']}" if url else None,
+                    metadata={},
+                )
+            )
+        return out
+
+
+class GitLabIssueAdapter(_GitLabAdapter):
+    """GitLab issues and incidents: the issue-tracker role Jira plays in other bundles."""
+
+    source = "gitlab_issue"
+
+    def normalize(self, record: dict[str, Any]) -> list[EvidenceItemInput]:
+        issue = record["issue"]
+        ref = issue["references"]["full"]
+        url = issue.get("web_url") or ""
+        author = self._author(issue.get("author"))
+        assignees = [self._author(a) for a in issue.get("assignees") or []]
+        assignees = [a for a in assignees if a]
+        notes = self._notes(record.get("notes", []), ref, url, "issue")
+        participants = {p.id for p in [author, *assignees] if p} | {
+            n.author.id for n in notes if n.author
+        }
+        labels = issue.get("labels", [])
+        state = issue.get("state")
+        return [
+            EvidenceItemInput(
+                source=self.source,
+                source_type=f"issue:{(issue.get('issue_type') or 'issue').lower()}",
+                external_id=ref,
+                author=author,
+                participants=sorted(participants),
+                timestamp=_parse_time(issue.get("created_at")),
+                title=issue.get("title"),
+                body=_bounded(issue.get("description") or ""),
+                url=url or None,
+                metadata={
+                    # GitLab has no "status" field; state opened/closed is the closest one.
+                    "status": state,
+                    "issue_type": issue.get("issue_type"),
+                    # GitLab's scoped "Service::<name>" labels play the role of Jira components.
+                    "components": [
+                        lb.split("::", 1)[1] for lb in labels if lb.lower().startswith("service::")
+                    ],
+                    "labels": labels,
+                    "assignee": assignees[0].id if assignees else None,
+                    "closed_at": issue.get("closed_at"),
+                    "updated": issue.get("updated_at"),
+                    # Other ways a record can name this issue, all provider-given.
+                    "aliases": [a for a in [url] if a],
+                },
+            ),
+            *notes,
+        ]
+
+
+class GitLabMergeRequestAdapter(_GitLabAdapter):
+    """GitLab merge requests: the code-review role GitHub pull requests play elsewhere."""
+
+    source = "gitlab_mr"
+
+    def normalize(self, record: dict[str, Any]) -> list[EvidenceItemInput]:
+        mr = record["merge_request"]
+        ref = mr["references"]["full"]
+        url = mr.get("web_url") or ""
+        author = self._author(mr.get("author"))
+        return [
+            EvidenceItemInput(
+                source=self.source,
+                source_type="merge_request",
+                external_id=ref,
+                author=author,
+                participants=[author.id] if author else [],
+                timestamp=_parse_time(mr.get("created_at")),
+                title=mr.get("title"),
+                body=_bounded(mr.get("description") or ""),
+                url=url or None,
+                metadata={
+                    "state": mr.get("state"),
+                    "merged_at": mr.get("merged_at"),
+                    "head_ref": mr.get("source_branch"),
+                    "base_ref": mr.get("target_branch"),
+                    # Issues GitLab itself reports as related to this MR
+                    # (GET /projects/:id/issues/:iid/related_merge_requests), not inferred.
+                    "related_issues": sorted(record.get("related_issues", [])),
+                },
+            ),
+            *self._notes(record.get("notes", []), ref, url, "merge_request"),
+        ]
+
+
+ADAPTERS = {
+    a.source: a
+    for a in (
+        JiraAdapter,
+        SlackAdapter,
+        GitHubAdapter,
+        DocumentAdapter,
+        GitLabIssueAdapter,
+        GitLabMergeRequestAdapter,
+    )
+}
+# Always listed in a bundle's inventory, as "unavailable" when absent. Other families are listed
+# only when the manifest declares them or supplies files, so a Jira/Slack bundle stays unchanged.
+CORE_FAMILIES = ("jira", "slack", "github", "document")

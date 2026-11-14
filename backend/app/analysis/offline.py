@@ -6,9 +6,10 @@ instruction written inside the evidence. It lets the full flow run without an AP
 and gives tests a reproducible baseline. A model-backed extractor must return the same
 Extraction schema and passes through the same citation validation.
 
-Known limitation: areas are discovered only from Jira `components`. An operational topic
-that appears only in Slack, GitHub or a runbook, or a Jira issue without components, is
-not found by this extractor. Discovering such areas is the model-backed extractor's job
+Known limitation: areas are discovered only from issue-tracker `components` (Jira
+components, or GitLab `Service::<name>` labels). An operational topic that appears only in
+chat, code review or a runbook, or an issue without components, is not found by this
+extractor. Discovering such areas is the model-backed extractor's job
 (app/analysis/openai_extractor.py).
 """
 
@@ -44,6 +45,10 @@ def doc_facets(body: str) -> list[str]:
 
 
 INCIDENT_TYPES = {"incident"}
+# Issue trackers whose "issue:<type>" records anchor events, and the chat / code-review
+# families whose top-level records are linked to an event when they name its issue.
+TRACKER_SOURCES = {"jira", "gitlab_issue"}
+THREAD_SOURCES = {"slack", "github", "gitlab_mr"}
 
 
 def _first_sentence(text: str, limit: int = 140) -> str:
@@ -62,6 +67,24 @@ def _text(item: ItemView) -> str:
     return "\n".join(c.text for c in item.chunks) + "\n" + (item.title or "")
 
 
+def _is_incident(issue: ItemView) -> bool:
+    return issue.source_type.split(":", 1)[1] in INCIDENT_TYPES
+
+
+def _event_order(issue: ItemView) -> tuple[bool, str, str]:
+    """Earliest issue first; an issue without a timestamp sorts last; ties break on ref."""
+    return (issue.occurred_at is None, issue.occurred_at or "", issue.ref)
+
+
+def _record_owners(incidents: list[ItemView], links: dict[str, list[ItemView]]) -> dict[str, str]:
+    """For every linked record, the incident whose event keeps it: the earliest one."""
+    owner: dict[str, str] = {}
+    for incident in sorted(incidents, key=_event_order):
+        for r in links[incident.ref]:
+            owner.setdefault(r.ref, incident.ref)
+    return owner
+
+
 class OfflineExtractor:
     model_id = "offline-rules/1"
 
@@ -72,7 +95,9 @@ class OfflineExtractor:
                 children[it.parent_ref].append(it)
 
         issues = [
-            it for it in view.items if it.source == "jira" and it.source_type.startswith("issue:")
+            it
+            for it in view.items
+            if it.source in TRACKER_SOURCES and it.source_type.startswith("issue:")
         ]
         by_component: dict[str, list[ItemView]] = defaultdict(list)
         for issue in issues:
@@ -83,12 +108,20 @@ class OfflineExtractor:
         for comp, comp_issues in sorted(by_component.items()):
             area_refs: set[str] = set()
             events = []
-            for issue in sorted(comp_issues, key=lambda i: i.ref):
+            ordered = sorted(comp_issues, key=lambda i: i.ref)
+            links = {
+                i.ref: self._linked_records(i, i.ref.split(":", 1)[1], view.items, children)
+                for i in ordered
+            }
+            owner = _record_owners([i for i in ordered if _is_incident(i)], links)
+            for issue in ordered:
                 key = issue.ref.split(":", 1)[1]
-                linked = self._linked_records(issue, key, view.items, children)
-                area_refs.update(r.ref for r in linked)
-                if issue.source_type.split(":", 1)[1] not in INCIDENT_TYPES:
+                area_refs.update(r.ref for r in links[issue.ref])
+                if not _is_incident(issue):
                     continue
+                # A record that names several incidents (one fix for two outages) stays in
+                # the area but belongs to one event only, so each record is counted once.
+                linked = [r for r in links[issue.ref] if owner[r.ref] == issue.ref]
                 resolver = self._resolver(issue, linked)
                 cites = [_cite(issue)]
                 resolver_rec = next(
@@ -146,14 +179,15 @@ class OfflineExtractor:
         children: dict[str, list[ItemView]],
     ) -> list[ItemView]:
         """Records about one event, across tools, so one incident counts once."""
-        pattern = re.compile(rf"\b{re.escape(key)}\b")
+        names = [key, *issue.metadata.get("aliases", [])]
+        pattern = re.compile("|".join(rf"(?<!\w){re.escape(n)}(?!\w)" for n in names))
         linked = {issue.ref: issue}
         for c in children.get(issue.ref, []):
             linked[c.ref] = c
         for it in all_items:
-            if it.source in ("slack", "github") and not it.parent_ref:
+            if it.source in THREAD_SOURCES and not it.parent_ref:
                 hay = _text(it) + " " + str(it.metadata.get("head_ref") or "")
-                if pattern.search(hay):
+                if pattern.search(hay) or key in it.metadata.get("related_issues", []):
                     linked[it.ref] = it
                     for c in children.get(it.ref, []):
                         linked[c.ref] = c
