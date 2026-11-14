@@ -67,6 +67,24 @@ def _text(item: ItemView) -> str:
     return "\n".join(c.text for c in item.chunks) + "\n" + (item.title or "")
 
 
+def _is_incident(issue: ItemView) -> bool:
+    return issue.source_type.split(":", 1)[1] in INCIDENT_TYPES
+
+
+def _event_order(issue: ItemView) -> tuple[bool, str, str]:
+    """Earliest issue first; an issue without a timestamp sorts last; ties break on ref."""
+    return (issue.occurred_at is None, issue.occurred_at or "", issue.ref)
+
+
+def _record_owners(incidents: list[ItemView], links: dict[str, list[ItemView]]) -> dict[str, str]:
+    """For every linked record, the incident whose event keeps it: the earliest one."""
+    owner: dict[str, str] = {}
+    for incident in sorted(incidents, key=_event_order):
+        for r in links[incident.ref]:
+            owner.setdefault(r.ref, incident.ref)
+    return owner
+
+
 class OfflineExtractor:
     model_id = "offline-rules/1"
 
@@ -90,12 +108,20 @@ class OfflineExtractor:
         for comp, comp_issues in sorted(by_component.items()):
             area_refs: set[str] = set()
             events = []
-            for issue in sorted(comp_issues, key=lambda i: i.ref):
+            ordered = sorted(comp_issues, key=lambda i: i.ref)
+            links = {
+                i.ref: self._linked_records(i, i.ref.split(":", 1)[1], view.items, children)
+                for i in ordered
+            }
+            owner = _record_owners([i for i in ordered if _is_incident(i)], links)
+            for issue in ordered:
                 key = issue.ref.split(":", 1)[1]
-                linked = self._linked_records(issue, key, view.items, children)
-                area_refs.update(r.ref for r in linked)
-                if issue.source_type.split(":", 1)[1] not in INCIDENT_TYPES:
+                area_refs.update(r.ref for r in links[issue.ref])
+                if not _is_incident(issue):
                     continue
+                # A record that names several incidents (one fix for two outages) stays in
+                # the area but belongs to one event only, so each record is counted once.
+                linked = [r for r in links[issue.ref] if owner[r.ref] == issue.ref]
                 resolver = self._resolver(issue, linked)
                 cites = [_cite(issue)]
                 resolver_rec = next(

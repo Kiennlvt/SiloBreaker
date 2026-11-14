@@ -204,3 +204,81 @@ def test_offline_detection_finds_the_service_area(session, gitlab_bundle):
     assert counts["linked_records"] == 10
     assert patroni.signal_values["signals"]["D"] == 0.5  # runbook has steps, misses the rest
     assert patroni.review_priority is not None and patroni.eligibility_status == "ranked"
+
+
+def test_shared_merge_request_belongs_to_the_earliest_event_only(session, tmp_path):
+    """One fix for two outages: the MR links to both incidents but sits in one event."""
+    from app.analysis.contract import validate_citations
+    from app.analysis.offline import OfflineExtractor
+    from app.analysis.service import build_view
+
+    root = tmp_path / "shared"
+    later = _incident(201, "Patroni failover stalled again", "mr-author", [])
+    earlier = _incident(
+        202, "Patroni failover stalled", "pg-expert", [_note(5, "pg-expert", "Failed over.", "t")]
+    )
+    earlier["notes"][0]["created_at"] = "2024-12-01T11:00:00.000Z"
+    # #202 has the larger ref but the earlier timestamp: time decides, not ref order.
+    later["issue"]["created_at"] = "2025-01-01T10:00:00.000Z"
+    earlier["issue"]["created_at"] = "2024-12-01T10:00:00.000Z"
+    mr = {
+        "merge_request": {
+            "id": 6001,
+            "iid": 3,
+            "project_id": 1,
+            "title": "Fix leader key cleanup",
+            "description": "One fix for both failovers.",
+            "state": "merged",
+            "created_at": "2025-01-02T09:00:00.000Z",
+            "source_branch": "fix",
+            "target_branch": "master",
+            "author": _user("mr-author"),
+            "web_url": "https://gitlab.com/gitlab-com/runbooks/-/merge_requests/3",
+            "references": {"full": "gitlab-com/runbooks!3"},
+        },
+        "notes": [_note(8, "reviewer-one", "LGTM", "2025-01-02T10:00:00.000Z")],
+        "related_issues": [f"{PROD}#201", f"{PROD}#202"],
+    }
+    records = {"gitlab_issue/201.json": later, "gitlab_issue/202.json": earlier}
+    records["gitlab_mr/runbooks-3.json"] = mr
+    for rel, data in records.items():
+        (root / rel).parent.mkdir(parents=True, exist_ok=True)
+        (root / rel).write_text(json.dumps(data), encoding="utf-8")
+    people = ["oncall-reporter", "pg-expert", "mr-author", "reviewer-one"]
+    manifest = {
+        "schema_version": "evidence-bundle/1",
+        "project_key": "gitlab-shared-mr",
+        "source_inventory": {"gitlab_issue": "incomplete", "gitlab_mr": "incomplete"},
+        "identities": {p: {"display_name": p, "gitlab": p} for p in people},
+        "files": {
+            "gitlab_issue": ["gitlab_issue/201.json", "gitlab_issue/202.json"],
+            "gitlab_mr": ["gitlab_mr/runbooks-3.json"],
+        },
+    }
+    (root / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+
+    bundle = import_bundle(session, root)
+    view = build_view(session, bundle)
+    proposal = OfflineExtractor().extract(view)
+    kept, rejected = validate_citations(proposal, view)
+    assert rejected == []
+    area = next(a for a in kept if a.key == "Patroni")
+    mr_refs = {"gitlab_mr:gitlab-com/runbooks!3", "gitlab_mr:gitlab-com/runbooks!3#note_8"}
+    holders = {e.key: mr_refs & set(e.record_refs) for e in area.events}
+    assert holders == {f"{PROD}#201": set(), f"{PROD}#202": mr_refs}
+    assert mr_refs <= set(area.record_refs)  # still part of the area's evidence
+    # Resolver rule unchanged: #201's assignee only authored the MR, which is not in #201.
+    resolvers = {e.key: e.resolver_id for e in area.events}
+    assert resolvers == {f"{PROD}#201": None, f"{PROD}#202": "pg-expert"}
+
+    h = Handoff(
+        project_key=bundle.project_key,
+        bundle_id=bundle.id,
+        expert_id="pg-expert",
+        successor_id="mr-author",
+    )
+    session.add(h)
+    session.flush()
+    analysis = run_analysis(session, h, "pg-expert")
+    finding = session.query(Finding).filter_by(analysis_id=analysis.id, area_key="Patroni").one()
+    assert finding.signal_values["counts"]["distinct_events"] == 2
