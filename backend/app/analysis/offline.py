@@ -6,9 +6,10 @@ instruction written inside the evidence. It lets the full flow run without an AP
 and gives tests a reproducible baseline. A model-backed extractor must return the same
 Extraction schema and passes through the same citation validation.
 
-Known limitation: areas are discovered only from Jira `components`. An operational topic
-that appears only in Slack, GitHub or a runbook, or a Jira issue without components, is
-not found by this extractor. Discovering such areas is the model-backed extractor's job
+Known limitation: areas are discovered only from issue-tracker `components` (Jira
+components, or GitLab `Service::<name>` labels). An operational topic that appears only in
+chat, code review or a runbook, or an issue without components, is not found by this
+extractor. Discovering such areas is the model-backed extractor's job
 (app/analysis/openai_extractor.py).
 """
 
@@ -44,6 +45,10 @@ def doc_facets(body: str) -> list[str]:
 
 
 INCIDENT_TYPES = {"incident"}
+# Issue trackers whose "issue:<type>" records anchor events, and the chat / code-review
+# families whose top-level records are linked to an event when they name its issue.
+TRACKER_SOURCES = {"jira", "gitlab_issue"}
+THREAD_SOURCES = {"slack", "github", "gitlab_mr"}
 
 
 def _first_sentence(text: str, limit: int = 140) -> str:
@@ -72,7 +77,9 @@ class OfflineExtractor:
                 children[it.parent_ref].append(it)
 
         issues = [
-            it for it in view.items if it.source == "jira" and it.source_type.startswith("issue:")
+            it
+            for it in view.items
+            if it.source in TRACKER_SOURCES and it.source_type.startswith("issue:")
         ]
         by_component: dict[str, list[ItemView]] = defaultdict(list)
         for issue in issues:
@@ -146,14 +153,15 @@ class OfflineExtractor:
         children: dict[str, list[ItemView]],
     ) -> list[ItemView]:
         """Records about one event, across tools, so one incident counts once."""
-        pattern = re.compile(rf"\b{re.escape(key)}\b")
+        names = [key, *issue.metadata.get("aliases", [])]
+        pattern = re.compile("|".join(rf"(?<!\w){re.escape(n)}(?!\w)" for n in names))
         linked = {issue.ref: issue}
         for c in children.get(issue.ref, []):
             linked[c.ref] = c
         for it in all_items:
-            if it.source in ("slack", "github") and not it.parent_ref:
+            if it.source in THREAD_SOURCES and not it.parent_ref:
                 hay = _text(it) + " " + str(it.metadata.get("head_ref") or "")
-                if pattern.search(hay):
+                if pattern.search(hay) or key in it.metadata.get("related_issues", []):
                     linked[it.ref] = it
                     for c in children.get(it.ref, []):
                         linked[c.ref] = c

@@ -439,6 +439,54 @@ docs/              design specs (read in order 01 → 10)
 AGENTS.md          rules for coding agents working in this repo
 ```
 
+## Real public data: GitLab.com incidents
+
+The `payment-platform` scenario below is synthetic, so a reader cannot check it. To run the same
+pipeline on records anyone can open, SiloBreaker can import GitLab's own production operations,
+which GitLab publishes in the open:
+
+| Evidence role | Public source | Source family |
+|---|---|---|
+| Incidents (Jira's role) | issues of type *incident* in [`gitlab-com/gl-infra/production`](https://gitlab.com/gitlab-com/gl-infra/production/-/issues) | `gitlab_issue` |
+| Fixes and reviews (GitHub's role) | merge requests GitLab reports as related to each incident | `gitlab_mr` |
+| Runbooks | Markdown under `docs/<service>/` in [`gitlab-com/runbooks`](https://gitlab.com/gitlab-com/runbooks) | `document` |
+| Chat | GitLab's incident Slack is not public | `slack: unavailable` |
+
+```bash
+# 1. Find the Service::<name> labels with the most closed incidents
+python scripts/fetch_gitlab_bundle.py --list-services
+
+# 2. Fetch a sample (public, read-only REST API; stdlib only; see GITLAB_TOKEN below)
+python scripts/fetch_gitlab_bundle.py --services Patroni Redis --per-service 8 --max-docs 6
+
+# 3. Run the API on that bundle instead of the synthetic one
+cd backend && SB_FIXTURES_INPUT_DIR=../fixtures/public/gitlab uvicorn app.main:app --port 8000
+```
+
+- Every record is a verbatim API response and links back to its original on gitlab.com, so each
+  citation in a finding can be opened and checked. `fixtures/public/gitlab/SOURCES.md` records
+  what was fetched and when.
+- Areas come from the `Service::<name>` label (the offline extractor's stand-in for Jira
+  components). An MR joins an incident when GitLab lists it as related, or when it names the
+  incident by reference or URL. Notes that GitLab marks as `system` are skipped.
+- The incident sample is declared `incomplete` (never the full export) and confidential issues are
+  never fetched. Runbooks are `included` unless `--max-docs` cut a folder short.
+- If a service's runbooks are not in `docs/<service-slug>/`, pass `--runbook-dir "CI Runners=ci-runners"`.
+- `--exclude-users alert-bot gitlab-bot` leaves accounts out (users GitLab flags `bot: true` are
+  always left out, but GitLab.com's public user objects do not carry that flag, so name bots
+  here). `--pseudonymize` replaces usernames, names and @mentions with stable codes (E01, ...)
+  and keeps the links to the original records. `SOURCES.md` reports both, plus an attribution
+  table: per service, how many closed incidents have an assignee who also acted in the record.
+- Fetched data is gitignored (`fixtures/public/`) and never committed.
+- To demo a handoff, create a member account in `/admin/users` whose person ID is the GitLab
+  username of the engineer you choose as expert. People are named as they appear in GitLab's
+  public records; present results as where knowledge is concentrated in a sample, not as a
+  judgement of anyone.
+- `GITLAB_TOKEN` (a personal access token with `read_api`) is strongly recommended. GitLab.com
+  answers 401 to anonymous requests for issue and MR notes, so without a token the script skips
+  every note, says so in `SOURCES.md`, and who acted on each incident is under-counted. Issues,
+  related MRs and runbooks are fetched either way.
+
 ## Fixture scenario
 
 One fictional `payment-platform` service. Alice is transferring, Bob is the successor.
@@ -450,7 +498,8 @@ One fictional `payment-platform` service. Alice is transferring, Bob is the succ
 | Certificates | Control: well documented runbook | Adequately covered, no number |
 | FX rates | Control: single weak mention | Insufficient evidence, no number |
 
-**Known limitation of the offline extractor:** it discovers areas only from Jira `components`.
+**Known limitation of the offline extractor:** it discovers areas only from issue-tracker
+components (Jira `components`, or GitLab `Service::<name>` labels).
 A topic that appears only in Slack, GitHub or a runbook is not found offline; the model-backed
 extractor (`SB_AI_PROVIDER=openai`) is the path for that, and its output passes the same
 citation validation.

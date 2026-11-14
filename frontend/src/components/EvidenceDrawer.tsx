@@ -7,6 +7,8 @@ const SOURCE_LABEL: Record<string, string> = {
   slack: "Slack",
   github: "GitHub",
   document: "Runbook",
+  gitlab_issue: "GitLab issue",
+  gitlab_mr: "GitLab MR",
 };
 
 function Highlight({ text, quote }: { text: string; quote: string }) {

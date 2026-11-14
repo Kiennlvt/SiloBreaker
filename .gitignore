@@ -11,3 +11,6 @@ frontend/dist/
 
 .vs/
 *.egg-info/
+
+# Public data fetched by scripts/fetch_gitlab_bundle.py: names real people, never committed.
+fixtures/public/
